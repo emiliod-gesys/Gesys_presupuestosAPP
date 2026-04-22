@@ -1,0 +1,220 @@
+import { createClient } from "@/lib/supabase/server"
+import { redirect } from "next/navigation"
+import Link from "next/link"
+import { Plus, Bell, FolderOpen, Mail } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
+import { Badge, StatusBadge, RoleBadge } from "@/components/ui/badge"
+import { Avatar } from "@/components/ui/avatar"
+import { formatCurrency, formatDate, getBudgetStatus } from "@/lib/utils"
+import { NotificationActions } from "@/components/dashboard/notification-actions"
+import { InvitationActions } from "@/components/dashboard/invitation-actions"
+
+export default async function DashboardPage() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect("/login")
+
+  // Projects where user is a member
+  const { data: memberships } = await supabase
+    .from("project_members")
+    .select("role, project:projects(*)")
+    .eq("user_id", user.id)
+    .order("joined_at", { ascending: false })
+
+  // Pending project invitations
+  const { data: invitations } = await supabase
+    .from("project_invitations")
+    .select("*, project:projects(name, client), inviter:profiles!inviter_id(full_name, email, avatar_url)")
+    .eq("invitee_id", user.id)
+    .eq("status", "pending")
+    .order("created_at", { ascending: false })
+
+  // Unread notifications
+  const { data: notifications } = await supabase
+    .from("notifications")
+    .select("*")
+    .eq("user_id", user.id)
+    .eq("is_read", false)
+    .order("created_at", { ascending: false })
+    .limit(10)
+
+  // Get spent amounts per project
+  const projectIds = (memberships || []).map((m) => (m.project as unknown as { id: string }).id)
+  let spentByProject: Record<string, number> = {}
+
+  if (projectIds.length > 0) {
+    const { data: txData } = await supabase
+      .from("transactions")
+      .select("project_id, amount, transaction_type:transaction_types(type)")
+      .in("project_id", projectIds)
+
+    if (txData) {
+      txData.forEach((tx) => {
+        const type = (tx.transaction_type as unknown as { type: string } | null)?.type
+        const delta = type === "expense" ? tx.amount : -tx.amount
+        spentByProject[tx.project_id] = (spentByProject[tx.project_id] || 0) + delta
+      })
+    }
+  }
+
+  return (
+    <div className="max-w-7xl mx-auto space-y-8 animate-in">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+          <p className="text-gray-500 text-sm mt-0.5">Gestiona tus proyectos y presupuestos</p>
+        </div>
+        <Link href="/projects/new">
+          <Button>
+            <Plus className="h-4 w-4" />
+            Nuevo proyecto
+          </Button>
+        </Link>
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        {/* Projects grid - 2/3 width */}
+        <div className="xl:col-span-2 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-base font-semibold text-gray-900">Mis proyectos</h2>
+            <span className="text-sm text-gray-500">{memberships?.length || 0} proyectos</span>
+          </div>
+
+          {!memberships?.length ? (
+            <Card>
+              <CardContent className="py-16 text-center">
+                <FolderOpen className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+                <p className="text-gray-500 font-medium">No tienes proyectos aún</p>
+                <p className="text-gray-400 text-sm mt-1">Crea tu primer proyecto para comenzar</p>
+                <Link href="/projects/new">
+                  <Button className="mt-4" size="sm">
+                    <Plus className="h-4 w-4" /> Crear proyecto
+                  </Button>
+                </Link>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2">
+              {memberships.map((m) => {
+                const project = m.project as unknown as {
+                  id: string; name: string; client?: string; status: string;
+                  total_budget: number; currency: string; start_date?: string; end_date?: string
+                }
+                const spent = Math.max(0, spentByProject[project.id] || 0)
+                const { pct, bg } = getBudgetStatus(spent, project.total_budget)
+
+                return (
+                  <Link key={project.id} href={`/projects/${project.id}`}>
+                    <Card className="hover:shadow-md transition-shadow cursor-pointer h-full">
+                      <CardContent className="pt-5">
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-semibold text-gray-900 truncate">{project.name}</h3>
+                            {project.client && (
+                              <p className="text-xs text-gray-500 mt-0.5 truncate">{project.client}</p>
+                            )}
+                          </div>
+                          <div className="flex gap-1.5 ml-2 flex-shrink-0">
+                            <StatusBadge status={project.status} />
+                            <RoleBadge role={m.role} />
+                          </div>
+                        </div>
+
+                        {/* Budget bar */}
+                        <div className="space-y-1.5">
+                          <div className="flex justify-between text-xs text-gray-500">
+                            <span>Presupuesto ejecutado</span>
+                            <span className="font-medium">{Math.min(pct, 100).toFixed(1)}%</span>
+                          </div>
+                          <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all ${bg}`}
+                              style={{ width: `${Math.min(pct, 100)}%` }}
+                            />
+                          </div>
+                          <div className="flex justify-between text-xs">
+                            <span className="text-gray-500">{formatCurrency(spent, project.currency)} gastado</span>
+                            <span className="font-medium text-gray-700">{formatCurrency(project.total_budget, project.currency)}</span>
+                          </div>
+                        </div>
+
+                        {(project.start_date || project.end_date) && (
+                          <div className="mt-3 pt-3 border-t border-gray-50 flex gap-4 text-xs text-gray-400">
+                            {project.start_date && <span>Inicio: {formatDate(project.start_date)}</span>}
+                            {project.end_date && <span>Fin: {formatDate(project.end_date)}</span>}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </Link>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Right column: notifications + invitations */}
+        <div className="space-y-6">
+          {/* Invitations */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Mail className="h-4 w-4 text-indigo-600" />
+                <h2 className="text-sm font-semibold text-gray-900">Invitaciones pendientes</h2>
+                {!!invitations?.length && (
+                  <Badge variant="info">{invitations.length}</Badge>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent className="py-3">
+              {!invitations?.length ? (
+                <p className="text-sm text-gray-400 py-4 text-center">Sin invitaciones pendientes</p>
+              ) : (
+                <div className="space-y-3">
+                  {invitations.map((inv) => (
+                    <div key={inv.id} className="border border-gray-100 rounded-lg p-3">
+                      <p className="text-sm font-medium text-gray-900 mb-0.5">
+                        {(inv.project as { name: string }).name}
+                      </p>
+                      <p className="text-xs text-gray-500 mb-2">
+                        De: {(inv.inviter as { full_name?: string; email: string }).full_name || (inv.inviter as { email: string }).email}
+                        {" · "}<RoleBadge role={inv.role} />
+                      </p>
+                      <InvitationActions invitationId={inv.id} projectId={(inv.project as { id?: string })?.id || ""} />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Notifications */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Bell className="h-4 w-4 text-indigo-600" />
+                <h2 className="text-sm font-semibold text-gray-900">Notificaciones</h2>
+                {!!notifications?.length && (
+                  <Badge variant="danger">{notifications.length}</Badge>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent className="py-3">
+              {!notifications?.length ? (
+                <p className="text-sm text-gray-400 py-4 text-center">Sin notificaciones nuevas</p>
+              ) : (
+                <div className="space-y-2">
+                  {notifications.map((n) => (
+                    <NotificationActions key={n.id} notification={n} />
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </div>
+  )
+}
