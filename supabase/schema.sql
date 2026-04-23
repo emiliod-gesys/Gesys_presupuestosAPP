@@ -131,6 +131,58 @@ create table if not exists notifications (
 );
 
 -- ============================================================
+-- PASO 1b: Funciones RLS (evitan recursión → PostgREST 42P17 en /project_members y /projects)
+-- ============================================================
+
+create or replace function public.current_user_is_project_member(p_project_id uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select exists (
+    select 1 from public.project_members pm
+    where pm.project_id = p_project_id and pm.user_id = auth.uid()
+  );
+$$;
+
+create or replace function public.current_user_is_project_admin(p_project_id uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select exists (
+    select 1 from public.project_members pm
+    where pm.project_id = p_project_id and pm.user_id = auth.uid() and pm.role = 'admin'
+  );
+$$;
+
+create or replace function public.project_has_no_members(p_project_id uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select not exists (
+    select 1 from public.project_members pm
+    where pm.project_id = p_project_id
+  );
+$$;
+
+revoke all on function public.current_user_is_project_member(uuid) from public;
+grant execute on function public.current_user_is_project_member(uuid) to authenticated;
+
+revoke all on function public.current_user_is_project_admin(uuid) from public;
+grant execute on function public.current_user_is_project_admin(uuid) to authenticated;
+
+revoke all on function public.project_has_no_members(uuid) from public;
+grant execute on function public.project_has_no_members(uuid) to authenticated;
+
+-- ============================================================
 -- PASO 2: HABILITAR RLS EN TODAS LAS TABLAS
 -- ============================================================
 
@@ -180,12 +232,8 @@ create policy "companions_update" on companions
 create policy "projects_select" on projects
   for select to authenticated
   using (
-    created_by = auth.uid() or
-    exists (
-      select 1 from project_members
-      where project_members.project_id = projects.id
-        and project_members.user_id = auth.uid()
-    )
+    created_by = auth.uid()
+    or public.current_user_is_project_member(projects.id)
   );
 
 create policy "projects_insert" on projects
@@ -194,63 +242,27 @@ create policy "projects_insert" on projects
 
 create policy "projects_update" on projects
   for update to authenticated
-  using (
-    exists (
-      select 1 from project_members
-      where project_members.project_id = projects.id
-        and project_members.user_id = auth.uid()
-        and project_members.role = 'admin'
-    )
-  );
+  using (public.current_user_is_project_admin(projects.id));
 
--- PROJECT MEMBERS
+-- PROJECT MEMBERS (políticas sin auto-referencia: evitan 42P17 / infinite recursion)
 create policy "project_members_select" on project_members
   for select to authenticated
-  using (
-    exists (
-      select 1 from project_members pm
-      where pm.project_id = project_members.project_id
-        and pm.user_id = auth.uid()
-    )
-  );
+  using (public.current_user_is_project_member(project_id));
 
 create policy "project_members_insert" on project_members
   for insert to authenticated
   with check (
-    exists (
-      select 1 from project_members pm
-      where pm.project_id = project_members.project_id
-        and pm.user_id = auth.uid()
-        and pm.role = 'admin'
-    )
-    or
-    not exists (
-      select 1 from project_members pm
-      where pm.project_id = project_members.project_id
-    )
+    public.current_user_is_project_admin(project_id)
+    or public.project_has_no_members(project_id)
   );
 
 create policy "project_members_update" on project_members
   for update to authenticated
-  using (
-    exists (
-      select 1 from project_members pm
-      where pm.project_id = project_members.project_id
-        and pm.user_id = auth.uid()
-        and pm.role = 'admin'
-    )
-  );
+  using (public.current_user_is_project_admin(project_id));
 
 create policy "project_members_delete" on project_members
   for delete to authenticated
-  using (
-    exists (
-      select 1 from project_members pm
-      where pm.project_id = project_members.project_id
-        and pm.user_id = auth.uid()
-        and pm.role = 'admin'
-    )
-  );
+  using (public.current_user_is_project_admin(project_id));
 
 -- PROJECT INVITATIONS
 create policy "project_invitations_select" on project_invitations

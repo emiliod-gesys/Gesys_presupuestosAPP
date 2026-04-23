@@ -56,7 +56,7 @@ export default function NewProjectPage() {
         .from("projects")
         .select("id, name")
         .eq("is_template", true)
-        .or(`created_by.eq.${user.id}`)
+        .eq("created_by", user.id)
       setTemplates(data || [])
     }
     loadTemplates()
