@@ -48,3 +48,16 @@ export function getBudgetStatus(spent: number, budget: number) {
   if (pct >= 50) return { pct, color: "text-yellow-600", bg: "bg-yellow-500" }
   return { pct, color: "text-green-600", bg: "bg-green-500" }
 }
+
+/** Texto legible para toasts / consola (PostgREST / Supabase). */
+export function formatSupabaseError(
+  error: { message: string; details?: string | null; hint?: string | null; code?: string | null } | null | undefined,
+  fallback: string
+): string {
+  if (!error?.message) return fallback
+  const parts = [error.message]
+  if (error.details) parts.push(String(error.details))
+  if (error.hint) parts.push(String(error.hint))
+  if (error.code) parts.push(`[${error.code}]`)
+  return parts.join(" — ").slice(0, 400)
+}

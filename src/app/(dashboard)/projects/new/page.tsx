@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardFooter } from "@/components/ui/card"
 import { useToast } from "@/components/ui/toast"
 import { ArrowLeft, Plus, Trash2 } from "lucide-react"
 import Link from "next/link"
+import { formatSupabaseError } from "@/lib/utils"
 
 interface CategoryRow {
   id: string
@@ -128,6 +129,10 @@ export default function NewProjectPage() {
 
     const totalBudget = categories.reduce((sum, c) => sum + (parseFloat(c.budget_amount) || 0), 0)
 
+    const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+    const templateId =
+      selectedTemplate && uuidRe.test(selectedTemplate.trim()) ? selectedTemplate.trim() : null
+
     const { data: project, error } = await supabase.from("projects").insert({
       name: form.name.trim(),
       description: form.description || null,
@@ -139,11 +144,12 @@ export default function NewProjectPage() {
       currency: form.currency,
       created_by: user.id,
       is_template: saveAsTemplate,
-      template_id: selectedTemplate || null,
+      template_id: templateId,
     }).select().single()
 
     if (error || !project) {
-      toast("error", error?.message || "Error al crear el proyecto")
+      console.error("[nuevo proyecto] insert projects", { error, payload: { totalBudget, templateId } })
+      toast("error", formatSupabaseError(error, "Error al crear el proyecto"))
       setLoading(false)
       return
     }
