@@ -103,6 +103,28 @@ export default function NewProjectPage() {
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { router.push("/login"); return }
+    if (!user.email) {
+      toast("error", "Tu cuenta no tiene correo electr?nico; no se puede crear el proyecto.")
+      setLoading(false)
+      return
+    }
+
+    // projects.created_by referencia profiles(id); sin fila en profiles el INSERT falla (FK).
+    const { data: existingProfile } = await supabase.from("profiles").select("id").eq("id", user.id).maybeSingle()
+    if (!existingProfile) {
+      const meta = user.user_metadata || {}
+      const { error: profileErr } = await supabase.from("profiles").insert({
+        id: user.id,
+        email: user.email,
+        full_name: (meta.full_name as string | undefined) ?? (meta.name as string | undefined) ?? null,
+        avatar_url: (meta.avatar_url as string | undefined) ?? null,
+      })
+      if (profileErr) {
+        toast("error", profileErr.message || "No se pudo crear tu perfil. Ejecuta el SQL de pol?ticas en Supabase (profiles_insert_own) o revisa Table Editor ? profiles.")
+        setLoading(false)
+        return
+      }
+    }
 
     const totalBudget = categories.reduce((sum, c) => sum + (parseFloat(c.budget_amount) || 0), 0)
 
@@ -121,7 +143,7 @@ export default function NewProjectPage() {
     }).select().single()
 
     if (error || !project) {
-      toast("error", "Error al crear el proyecto")
+      toast("error", error?.message || "Error al crear el proyecto")
       setLoading(false)
       return
     }
@@ -169,7 +191,7 @@ export default function NewProjectPage() {
         </Link>
         <div>
           <h1 className="text-xl font-bold text-gray-900">Nuevo proyecto</h1>
-          <p className="text-sm text-gray-500">Define las características y renglones del presupuesto</p>
+          <p className="text-sm text-gray-500">Define las caracter?sticas y renglones del presupuesto</p>
         </div>
       </div>
 
@@ -195,19 +217,19 @@ export default function NewProjectPage() {
         {/* Project info */}
         <Card className="mb-4">
           <CardHeader>
-            <h2 className="text-sm font-semibold text-gray-900">Información del proyecto</h2>
+            <h2 className="text-sm font-semibold text-gray-900">Informaci?n del proyecto</h2>
           </CardHeader>
           <CardContent className="space-y-4">
             <Input
               label="Nombre del proyecto *"
-              placeholder="Ej: Construcción Residencial Las Flores"
+              placeholder="Ej: Construcci?n Residencial Las Flores"
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               required
             />
             <Textarea
-              label="Descripción"
-              placeholder="Descripción general del proyecto..."
+              label="Descripci?n"
+              placeholder="Descripci?n general del proyecto..."
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
             />
@@ -219,7 +241,7 @@ export default function NewProjectPage() {
                 onChange={(e) => setForm({ ...form, client: e.target.value })}
               />
               <Input
-                label="Ubicación"
+                label="Ubicaci?n"
                 placeholder="Ciudad, Departamento"
                 value={form.location}
                 onChange={(e) => setForm({ ...form, location: e.target.value })}
@@ -242,7 +264,7 @@ export default function NewProjectPage() {
                 label="Moneda"
                 options={[
                   { value: "GTQ", label: "GTQ - Quetzal" },
-                  { value: "USD", label: "USD - Dólar" },
+                  { value: "USD", label: "USD - D?lar" },
                 ]}
                 value={form.currency}
                 onChange={(e) => setForm({ ...form, currency: e.target.value })}
@@ -257,10 +279,10 @@ export default function NewProjectPage() {
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-sm font-semibold text-gray-900">Renglones del presupuesto</h2>
-                <p className="text-xs text-gray-500 mt-0.5">El presupuesto total se calculará automáticamente</p>
+                <p className="text-xs text-gray-500 mt-0.5">El presupuesto total se calcular? autom?ticamente</p>
               </div>
               <Button type="button" size="sm" variant="outline" onClick={addCategory}>
-                <Plus className="h-3.5 w-3.5" /> Agregar renglón
+                <Plus className="h-3.5 w-3.5" /> Agregar rengl?n
               </Button>
             </div>
           </CardHeader>
@@ -269,7 +291,7 @@ export default function NewProjectPage() {
               <div key={cat.id} className="flex gap-3 items-start p-3 bg-gray-50 rounded-lg">
                 <div className="flex-1 grid grid-cols-2 gap-3">
                   <Input
-                    placeholder={`Renglón ${idx + 1} *`}
+                    placeholder={`Rengl?n ${idx + 1} *`}
                     value={cat.name}
                     onChange={(e) => updateCategory(cat.id, "name", e.target.value)}
                   />
@@ -283,7 +305,7 @@ export default function NewProjectPage() {
                   />
                   <Input
                     className="col-span-2"
-                    placeholder="Descripción del renglón (opcional)"
+                    placeholder="Descripci?n del rengl?n (opcional)"
                     value={cat.description}
                     onChange={(e) => updateCategory(cat.id, "description", e.target.value)}
                   />

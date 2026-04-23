@@ -157,6 +157,12 @@ create policy "profiles_select" on profiles
 create policy "profiles_update" on profiles
   for update to authenticated using (auth.uid() = id);
 
+-- Permite crear la fila de perfil desde el cliente si el trigger no corrió (p. ej. usuarios antiguos).
+drop policy if exists "profiles_insert_own" on profiles;
+create policy "profiles_insert_own" on profiles
+  for insert to authenticated
+  with check (auth.uid() = id);
+
 -- COMPANIONS
 create policy "companions_select" on companions
   for select to authenticated
