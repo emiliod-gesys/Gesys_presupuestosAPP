@@ -191,7 +191,7 @@ export default function NewProjectPage() {
         </Link>
         <div>
           <h1 className="text-xl font-bold text-gray-900">Nuevo proyecto</h1>
-          <p className="text-sm text-gray-500">Define las caracter\u00edsticas y renglones del presupuesto</p>
+          <p className="text-sm text-gray-500">{"Define las caracter\u00edsticas y renglones del presupuesto"}</p>
         </div>
       </div>
 
@@ -217,19 +217,19 @@ export default function NewProjectPage() {
         {/* Project info */}
         <Card className="mb-4">
           <CardHeader>
-            <h2 className="text-sm font-semibold text-gray-900">Informaci\u00f3n del proyecto</h2>
+            <h2 className="text-sm font-semibold text-gray-900">{"Informaci\u00f3n del proyecto"}</h2>
           </CardHeader>
           <CardContent className="space-y-4">
             <Input
               label="Nombre del proyecto *"
-              placeholder="Ej: Construcci\u00f3n Residencial Las Flores"
+              placeholder={"Ej: Construcci\u00f3n Residencial Las Flores"}
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               required
             />
             <Textarea
-              label="Descripci\u00f3n"
-              placeholder="Descripci\u00f3n general del proyecto..."
+              label={"Descripci\u00f3n"}
+              placeholder={"Descripci\u00f3n general del proyecto..."}
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
             />
@@ -241,7 +241,7 @@ export default function NewProjectPage() {
                 onChange={(e) => setForm({ ...form, client: e.target.value })}
               />
               <Input
-                label="Ubicaci\u00f3n"
+                label={"Ubicaci\u00f3n"}
                 placeholder="Ciudad, Departamento"
                 value={form.location}
                 onChange={(e) => setForm({ ...form, location: e.target.value })}
@@ -279,10 +279,10 @@ export default function NewProjectPage() {
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-sm font-semibold text-gray-900">Renglones del presupuesto</h2>
-                <p className="text-xs text-gray-500 mt-0.5">El presupuesto total se calcular\u00e1 autom\u00e1ticamente</p>
+                <p className="text-xs text-gray-500 mt-0.5">{"El presupuesto total se calcular\u00e1 autom\u00e1ticamente"}</p>
               </div>
               <Button type="button" size="sm" variant="outline" onClick={addCategory}>
-                <Plus className="h-3.5 w-3.5" /> Agregar rengl\u00f3n
+                <Plus className="h-3.5 w-3.5" /> {"Agregar rengl\u00f3n"}
               </Button>
             </div>
           </CardHeader>
@@ -305,7 +305,7 @@ export default function NewProjectPage() {
                   />
                   <Input
                     className="col-span-2"
-                    placeholder="Descripci\u00f3n del rengl\u00f3n (opcional)"
+                    placeholder={"Descripci\u00f3n del rengl\u00f3n (opcional)"}
                     value={cat.description}
                     onChange={(e) => updateCategory(cat.id, "description", e.target.value)}
                   />
