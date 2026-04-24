@@ -2,6 +2,8 @@ import { createClient } from "@/lib/supabase/server"
 import { redirect, notFound } from "next/navigation"
 import { formatCurrency, formatDate, cn } from "@/lib/utils"
 import { sumCategoryBudgets } from "@/lib/budget"
+import { budgetCategorySections } from "@/lib/budget-category-tree"
+import type { BudgetCategory } from "@/lib/types"
 import { PrintToolbar } from "@/components/projects/print-toolbar"
 
 export default async function BudgetStatementPrintPage({ params }: { params: Promise<{ id: string }> }) {
@@ -113,25 +115,38 @@ export default async function BudgetStatementPrintPage({ params }: { params: Pro
                   </td>
                 </tr>
               ) : (
-                (categories || []).map((cat) => {
-                  const spent = Math.max(0, spentByCategory[cat.id] || 0)
-                  const budget = Number(cat.budget_amount) || 0
-                  const avail = budget - spent
-                  const pct = budget > 0 ? (spent / budget) * 100 : 0
-                  return (
-                    <tr key={cat.id} className="border-b border-gray-100 last:border-0">
-                      <td className="px-3 py-2">
-                        <p className="font-medium text-gray-900">{cat.name}</p>
-                        {cat.description && <p className="text-xs text-gray-500">{cat.description}</p>}
-                      </td>
-                      <td className="px-3 py-2 text-right tabular-nums">{formatCurrency(budget, project.currency)}</td>
-                      <td className="px-3 py-2 text-right tabular-nums text-red-700">{formatCurrency(spent, project.currency)}</td>
-                      <td className={cn("px-3 py-2 text-right tabular-nums", avail < 0 ? "text-red-700" : "text-green-700")}>
-                        {formatCurrency(avail, project.currency)}
-                      </td>
-                      <td className="px-3 py-2 text-right tabular-nums">{pct.toFixed(1)}%</td>
-                    </tr>
-                  )
+                budgetCategorySections((categories || []) as BudgetCategory[]).flatMap(({ header, children }) => {
+                  const lineRow = (cat: BudgetCategory, key: string) => {
+                    const spent = Math.max(0, spentByCategory[cat.id] || 0)
+                    const budget = Number(cat.budget_amount) || 0
+                    const avail = budget - spent
+                    const pct = budget > 0 ? (spent / budget) * 100 : 0
+                    return (
+                      <tr key={key} className="border-b border-gray-100 last:border-0">
+                        <td className="px-3 py-2">
+                          <p className="font-medium text-gray-900">{cat.name}</p>
+                          {cat.description && <p className="text-xs text-gray-500">{cat.description}</p>}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums">{formatCurrency(budget, project.currency)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-red-700">{formatCurrency(spent, project.currency)}</td>
+                        <td className={cn("px-3 py-2 text-right tabular-nums", avail < 0 ? "text-red-700" : "text-green-700")}>
+                          {formatCurrency(avail, project.currency)}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums">{pct.toFixed(1)}%</td>
+                      </tr>
+                    )
+                  }
+                  if (children.length > 0) {
+                    return [
+                      <tr key={`sec-${header.id}`} className="border-b border-indigo-100 bg-indigo-50/60 print:bg-gray-100">
+                        <td colSpan={5} className="px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-indigo-950">
+                          {header.name}
+                        </td>
+                      </tr>,
+                      ...children.map((cat) => lineRow(cat, cat.id)),
+                    ]
+                  }
+                  return [lineRow(header, header.id)]
                 })
               )}
             </tbody>

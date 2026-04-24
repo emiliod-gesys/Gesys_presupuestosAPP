@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { StatusBadge } from "@/components/ui/badge"
 import { Avatar } from "@/components/ui/avatar"
 import { formatCurrency, formatDate, getBudgetStatus, budgetBarWidthPct, cn } from "@/lib/utils"
+import { budgetCategorySections } from "@/lib/budget-category-tree"
 import { MapPin, Calendar, Users, Building2 } from "lucide-react"
 import { ProjectStatusActions } from "@/components/projects/project-status-actions"
 import { DuplicateProjectButton } from "@/components/projects/duplicate-project-button"
@@ -20,7 +21,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
     supabase.from("projects").select("*, creator:profiles!created_by(full_name, email, avatar_url)").eq("id", id).single(),
     supabase.from("project_members").select("role").eq("project_id", id).eq("user_id", user.id).single(),
     supabase.from("project_members").select("role, user:profiles(full_name, email, avatar_url)").eq("project_id", id),
-    supabase.from("budget_categories").select("id, name, budget_amount").eq("project_id", id).order("order_index"),
+    supabase.from("budget_categories").select("id, name, budget_amount, parent_id, order_index, description").eq("project_id", id).order("order_index"),
   ])
 
   if (!project || !membership) redirect("/dashboard")
@@ -130,25 +131,52 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
               </div>
             </div>
 
-            {/* By category */}
-            {(categories || []).map((cat) => {
-              const spent = Math.max(0, spentByCategory[cat.id] || 0)
-              const { pct, bg } = getBudgetStatus(spent, cat.budget_amount)
-              return (
-                <div key={cat.id}>
-                  <div className="flex justify-between text-sm mb-1">
-                    <span className="text-gray-700 font-medium">{cat.name}</span>
-                    <span className="text-gray-500">
-                      {formatCurrency(spent, project.currency)} / {formatCurrency(cat.budget_amount, project.currency)} ·{" "}
-                      {pct.toFixed(1)}%
-                    </span>
-                  </div>
-                  <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                    <div className={`h-full rounded-full ${bg}`} style={{ width: `${budgetBarWidthPct(pct)}%` }} />
-                  </div>
+            {/* By category (agrupadas si hay parent_id) */}
+            {budgetCategorySections(categories || []).map(({ header, children }) =>
+              children.length > 0 ? (
+                <div key={header.id} className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-indigo-700">{header.name}</p>
+                  {children.map((cat) => {
+                    const spent = Math.max(0, spentByCategory[cat.id] || 0)
+                    const { pct, bg } = getBudgetStatus(spent, cat.budget_amount)
+                    return (
+                      <div key={cat.id} className="pl-2 border-l-2 border-indigo-100">
+                        <div className="mb-1 flex justify-between text-sm">
+                          <span className="font-medium text-gray-700">{cat.name}</span>
+                          <span className="text-gray-500">
+                            {formatCurrency(spent, project.currency)} / {formatCurrency(cat.budget_amount, project.currency)} ·{" "}
+                            {pct.toFixed(1)}%
+                          </span>
+                        </div>
+                        <div className="h-2 overflow-hidden rounded-full bg-gray-100">
+                          <div className={`h-full rounded-full ${bg}`} style={{ width: `${budgetBarWidthPct(pct)}%` }} />
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
+              ) : (
+                (() => {
+                  const cat = header
+                  const spent = Math.max(0, spentByCategory[cat.id] || 0)
+                  const { pct, bg } = getBudgetStatus(spent, cat.budget_amount)
+                  return (
+                    <div key={cat.id}>
+                      <div className="mb-1 flex justify-between text-sm">
+                        <span className="font-medium text-gray-700">{cat.name}</span>
+                        <span className="text-gray-500">
+                          {formatCurrency(spent, project.currency)} / {formatCurrency(cat.budget_amount, project.currency)} ·{" "}
+                          {pct.toFixed(1)}%
+                        </span>
+                      </div>
+                      <div className="h-2 overflow-hidden rounded-full bg-gray-100">
+                        <div className={`h-full rounded-full ${bg}`} style={{ width: `${budgetBarWidthPct(pct)}%` }} />
+                      </div>
+                    </div>
+                  )
+                })()
               )
-            })}
+            )}
           </CardContent>
         </Card>
       </div>

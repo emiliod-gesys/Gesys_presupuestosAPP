@@ -3,6 +3,8 @@ import { createServerClient } from "@supabase/ssr"
 import { NextResponse } from "next/server"
 import * as XLSX from "xlsx"
 import { sumCategoryBudgets } from "@/lib/budget"
+import { budgetCategorySections } from "@/lib/budget-category-tree"
+import type { BudgetCategory } from "@/lib/types"
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -65,16 +67,21 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     ["Moneda", project.currency],
   ]
 
-  const renglones = [
-    ["Renglón", "Descripción", "Presupuesto", "Ejecutado", "Disponible", "% uso"],
-    ...(categories || []).map((cat) => {
+  const renglonesRows = budgetCategorySections((categories || []) as BudgetCategory[]).flatMap(({ header, children }) => {
+    const row = (displayName: string, cat: BudgetCategory) => {
       const spent = Math.max(0, spentByCategory[cat.id] || 0)
       const budget = Number(cat.budget_amount) || 0
       const avail = budget - spent
       const pct = budget > 0 ? ((spent / budget) * 100).toFixed(1) : "0"
-      return [cat.name, cat.description || "", budget, spent, avail, pct]
-    }),
-  ]
+      return [displayName, cat.description || "", budget, spent, avail, pct]
+    }
+    if (children.length > 0) {
+      return children.map((cat) => row(`${header.name} › ${cat.name}`, cat))
+    }
+    return [row(header.name, header)]
+  })
+
+  const renglones = [["Renglón", "Descripción", "Presupuesto", "Ejecutado", "Disponible", "% uso"], ...renglonesRows]
 
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(resumen), "Resumen")

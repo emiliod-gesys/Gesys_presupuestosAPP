@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { formatCurrency } from "@/lib/utils"
+import { leafCategories } from "@/lib/budget-category-tree"
 import { CreateAlertButton } from "@/components/projects/create-alert-button"
 import { DeleteAlertButton } from "@/components/projects/delete-alert-button"
 import { Bell, BellOff } from "lucide-react"
@@ -27,9 +28,17 @@ export default async function AlertsPage({ params }: { params: Promise<{ id: str
       .select("*, category:budget_categories(name, budget_amount)")
       .eq("project_id", id)
       .order("threshold_percentage"),
-    supabase.from("budget_categories").select("id, name, budget_amount").eq("project_id", id).order("order_index"),
+    supabase.from("budget_categories").select("id, name, budget_amount, parent_id").eq("project_id", id).order("order_index"),
     supabase.from("projects").select("currency").eq("id", id).single(),
   ])
+
+  const cats = categories || []
+  const alertCategoryOptions = leafCategories(cats as { id: string; parent_id?: string | null }[]).map((c) => {
+    const row = c as { id: string; name: string; parent_id?: string | null }
+    const parent = row.parent_id ? cats.find((x) => x.id === row.parent_id) : undefined
+    const label = parent?.name ? `${parent.name} — ${row.name}` : row.name
+    return { value: row.id, label }
+  })
 
   return (
     <div className="space-y-6">
@@ -42,10 +51,7 @@ export default async function AlertsPage({ params }: { params: Promise<{ id: str
                 Alertas de presupuesto ({alerts?.length || 0})
               </h2>
             </div>
-            <CreateAlertButton
-              projectId={id}
-              categories={(categories || []).map((c) => ({ value: c.id, label: c.name }))}
-            />
+            <CreateAlertButton projectId={id} categories={alertCategoryOptions} />
           </div>
           <p className="text-xs text-gray-500 mt-1">
             Recibe notificaciones automáticas cuando un renglón alcance el porcentaje configurado.

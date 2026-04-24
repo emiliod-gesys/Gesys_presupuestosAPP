@@ -9,16 +9,16 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select } from "@/components/ui/select"
 import { Card, CardContent, CardHeader, CardFooter } from "@/components/ui/card"
 import { useToast } from "@/components/ui/toast"
-import { ArrowLeft, Plus, Trash2, Upload } from "lucide-react"
+import { ArrowLeft, FolderPlus, Plus, Trash2, Upload } from "lucide-react"
 import Link from "next/link"
 import { formatSupabaseError } from "@/lib/utils"
-
-interface CategoryRow {
-  id: string
-  name: string
-  description: string
-  budget_amount: string
-}
+import {
+  emptyGroupDraft,
+  emptyLineDraft,
+  templateCategoriesToGroupDrafts,
+  type NewProjectGroupDraft,
+  type NewProjectLineDraft,
+} from "@/lib/budget-category-tree"
 
 interface Template {
   id: string
@@ -93,9 +93,7 @@ export default function NewProjectPage() {
     currency: "GTQ",
   })
 
-  const [categories, setCategories] = useState<CategoryRow[]>([
-    { id: "1", name: "", description: "", budget_amount: "" },
-  ])
+  const [groups, setGroups] = useState<NewProjectGroupDraft[]>(() => [emptyGroupDraft()])
 
   useEffect(() => {
     const loadTemplates = async () => {
@@ -117,30 +115,55 @@ export default function NewProjectPage() {
     const supabase = createClient()
     const { data: cats } = await supabase
       .from("budget_categories")
-      .select("name, description, budget_amount")
+      .select("id, name, description, budget_amount, parent_id, order_index")
       .eq("project_id", templateId)
       .order("order_index")
     if (cats?.length) {
-      setCategories(cats.map((c, i) => ({
-        id: String(i + 1),
-        name: c.name,
-        description: c.description || "",
-        budget_amount: String(c.budget_amount),
-      })))
+      setGroups(templateCategoriesToGroupDrafts(cats))
     }
   }
 
-  const addCategory = () => {
-    setCategories([...categories, { id: Date.now().toString(), name: "", description: "", budget_amount: "" }])
+  const addGroup = () => {
+    setGroups((prev) => [...prev, emptyGroupDraft()])
   }
 
-  const removeCategory = (id: string) => {
-    if (categories.length === 1) return
-    setCategories(categories.filter((c) => c.id !== id))
+  const removeGroup = (groupId: string) => {
+    setGroups((prev) => (prev.length <= 1 ? prev : prev.filter((g) => g.id !== groupId)))
   }
 
-  const updateCategory = (id: string, field: keyof CategoryRow, value: string) => {
-    setCategories(categories.map((c) => c.id === id ? { ...c, [field]: value } : c))
+  const updateGroup = (groupId: string, field: "name" | "description", value: string) => {
+    setGroups((prev) => prev.map((g) => (g.id === groupId ? { ...g, [field]: value } : g)))
+  }
+
+  const addLineToGroup = (groupId: string) => {
+    setGroups((prev) =>
+      prev.map((g) => (g.id === groupId ? { ...g, lines: [...g.lines, emptyLineDraft()] } : g))
+    )
+  }
+
+  const removeLine = (groupId: string, lineId: string) => {
+    setGroups((prev) =>
+      prev.map((g) => {
+        if (g.id !== groupId) return g
+        if (g.lines.length <= 1) {
+          return { ...g, lines: [{ ...g.lines[0], name: "", description: "", budget_amount: "" }] }
+        }
+        return { ...g, lines: g.lines.filter((l) => l.id !== lineId) }
+      })
+    )
+  }
+
+  const updateLine = (groupId: string, lineId: string, field: keyof NewProjectLineDraft, value: string) => {
+    setGroups((prev) =>
+      prev.map((g) =>
+        g.id !== groupId
+          ? g
+          : {
+              ...g,
+              lines: g.lines.map((l) => (l.id === lineId ? { ...l, [field]: value } : l)),
+            }
+      )
+    )
   }
 
   const onCsvSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -158,15 +181,19 @@ export default function NewProjectPage() {
         )
         return
       }
-      setCategories(
-        parsed.map((r, i) => ({
-          id: `csv-${Date.now()}-${i}`,
-          name: r.name,
-          description: r.description,
-          budget_amount: r.budget_amount,
-        }))
-      )
-      toast("success", `Importados ${parsed.length} renglones`)
+      setGroups([
+        {
+          ...emptyGroupDraft(),
+          name: "",
+          lines: parsed.map((r, i) => ({
+            id: `csv-${Date.now()}-${i}`,
+            name: r.name,
+            description: r.description,
+            budget_amount: r.budget_amount,
+          })),
+        },
+      ])
+      toast("success", `Importados ${parsed.length} renglones en una categor?a (puedes nombrarla arriba)`)
     }
     reader.onerror = () => toast("error", "No se pudo leer el archivo")
     reader.readAsText(file, "UTF-8")
@@ -206,7 +233,10 @@ export default function NewProjectPage() {
       }
     }
 
-    const totalBudget = categories.reduce((sum, c) => sum + (parseFloat(c.budget_amount) || 0), 0)
+    const totalBudget = groups.reduce(
+      (sum, g) => sum + g.lines.reduce((s, l) => s + (parseFloat(l.budget_amount) || 0), 0),
+      0
+    )
 
     const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
     const templateId =
@@ -240,18 +270,66 @@ export default function NewProjectPage() {
       role: "admin",
     })
 
-    // Add categories
-    const validCats = categories.filter((c) => c.name.trim())
-    if (validCats.length > 0) {
-      await supabase.from("budget_categories").insert(
-        validCats.map((c, i) => ({
-          project_id: project.id,
-          name: c.name.trim(),
-          description: c.description || null,
-          budget_amount: parseFloat(c.budget_amount) || 0,
-          order_index: i,
-        }))
-      )
+    let orderIndex = 0
+    for (const g of groups) {
+      const groupName = g.name.trim()
+      const validLines = g.lines.filter((l) => l.name.trim())
+      if (validLines.length === 0) continue
+
+      if (groupName) {
+        const { data: parentRow, error: pErr } = await supabase
+          .from("budget_categories")
+          .insert({
+            project_id: project.id,
+            name: groupName,
+            description: g.description.trim() || null,
+            budget_amount: 0,
+            parent_id: null,
+            order_index: orderIndex,
+          })
+          .select("id")
+          .single()
+        if (pErr || !parentRow) {
+          toast("error", formatSupabaseError(pErr, "Error al crear la categor?a de presupuesto"))
+          setLoading(false)
+          return
+        }
+        orderIndex += 1
+        const parentId = parentRow.id as string
+        for (const line of validLines) {
+          const { error: cErr } = await supabase.from("budget_categories").insert({
+            project_id: project.id,
+            name: line.name.trim(),
+            description: line.description.trim() || null,
+            budget_amount: parseFloat(line.budget_amount) || 0,
+            parent_id: parentId,
+            order_index: orderIndex,
+          })
+          if (cErr) {
+            toast("error", formatSupabaseError(cErr, "Error al crear un rengl?n"))
+            setLoading(false)
+            return
+          }
+          orderIndex += 1
+        }
+      } else {
+        for (const line of validLines) {
+          const { error: cErr } = await supabase.from("budget_categories").insert({
+            project_id: project.id,
+            name: line.name.trim(),
+            description: line.description.trim() || null,
+            budget_amount: parseFloat(line.budget_amount) || 0,
+            parent_id: null,
+            order_index: orderIndex,
+          })
+          if (cErr) {
+            toast("error", formatSupabaseError(cErr, "Error al crear un rengl?n"))
+            setLoading(false)
+            return
+          }
+          orderIndex += 1
+        }
+      }
     }
 
     // Log
@@ -363,10 +441,14 @@ export default function NewProjectPage() {
           <CardHeader>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0">
-                <h2 className="text-sm font-semibold text-gray-900">Renglones del presupuesto</h2>
-                <p className="mt-0.5 text-xs text-gray-500">{"El presupuesto total se calcular\u00e1 autom\u00e1ticamente"}</p>
+                <h2 className="text-sm font-semibold text-gray-900">Categor?as y renglones del presupuesto</h2>
+                <p className="mt-0.5 text-xs text-gray-500">
+                  Crea una categor?a (ej. <span className="font-medium">Materiales</span>) y a?ade renglones debajo (ej. Piedra, Agua). Si
+                  dejas el nombre de categor?a vac?o, los renglones quedan al primer nivel como antes.
+                </p>
                 <p className="mt-1 text-xs text-gray-400">
-                  CSV: <span className="font-mono">nombre,monto,descripcion</span> (cabecera opcional).
+                  CSV: <span className="font-mono">nombre,monto,descripcion</span> (cabecera opcional); se cargan en un bloque. Puedes
+                  nombrar la categor?a despu?s.
                 </p>
               </div>
               <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row">
@@ -387,45 +469,84 @@ export default function NewProjectPage() {
                   <Upload className="h-3.5 w-3.5" />
                   Importar CSV
                 </Button>
-                <Button type="button" size="sm" variant="outline" onClick={addCategory} className="w-full sm:w-auto">
-                  <Plus className="h-3.5 w-3.5" /> {"Agregar rengl\u00f3n"}
+                <Button type="button" size="sm" variant="outline" onClick={addGroup} className="w-full sm:w-auto">
+                  <FolderPlus className="h-3.5 w-3.5" /> Nueva categor?a
                 </Button>
               </div>
             </div>
           </CardHeader>
-          <CardContent className="space-y-3">
-            {categories.map((cat, idx) => (
-              <div key={cat.id} className="flex flex-col gap-3 rounded-lg bg-gray-50 p-3 sm:flex-row sm:items-start">
-                <div className="grid min-w-0 flex-1 grid-cols-1 gap-3 sm:grid-cols-2">
-                  <Input
-                    placeholder={`Rengl\u00f3n ${idx + 1} *`}
-                    value={cat.name}
-                    onChange={(e) => updateCategory(cat.id, "name", e.target.value)}
-                  />
-                  <Input
-                    placeholder="Presupuesto asignado"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={cat.budget_amount}
-                    onChange={(e) => updateCategory(cat.id, "budget_amount", e.target.value)}
-                  />
-                  <Input
-                    className="col-span-2"
-                    placeholder={"Descripci\u00f3n del rengl\u00f3n (opcional)"}
-                    value={cat.description}
-                    onChange={(e) => updateCategory(cat.id, "description", e.target.value)}
-                  />
+          <CardContent className="space-y-4">
+            {groups.map((group) => (
+              <div key={group.id} className="rounded-xl border border-gray-200 bg-gray-50/80 p-3 shadow-sm sm:p-4">
+                <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <Input
+                      label="Nombre de la categor?a (opcional)"
+                      placeholder="Ej. Materiales, Mano de obra?"
+                      value={group.name}
+                      onChange={(e) => updateGroup(group.id, "name", e.target.value)}
+                    />
+                    <Input
+                      placeholder="Nota o descripci?n de la categor?a (opcional)"
+                      value={group.description}
+                      onChange={(e) => updateGroup(group.id, "description", e.target.value)}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => removeGroup(group.id)}
+                    disabled={groups.length === 1}
+                    className="self-end shrink-0 text-gray-300 transition-colors hover:text-red-400 disabled:opacity-30 sm:self-start"
+                    aria-label="Eliminar categor?a"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
                 </div>
-                <button
+                <p className="mb-2 text-xs font-medium text-gray-600">Renglones</p>
+                <div className="space-y-3">
+                  {group.lines.map((line, lineIdx) => (
+                    <div key={line.id} className="flex flex-col gap-3 rounded-lg border border-gray-100 bg-white p-3 sm:flex-row sm:items-start">
+                      <div className="grid min-w-0 flex-1 grid-cols-1 gap-3 sm:grid-cols-2">
+                        <Input
+                          placeholder={`Rengl?n ${lineIdx + 1} *`}
+                          value={line.name}
+                          onChange={(e) => updateLine(group.id, line.id, "name", e.target.value)}
+                        />
+                        <Input
+                          placeholder="Presupuesto asignado"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={line.budget_amount}
+                          onChange={(e) => updateLine(group.id, line.id, "budget_amount", e.target.value)}
+                        />
+                        <Input
+                          className="col-span-2"
+                          placeholder={"Descripci\u00f3n del rengl\u00f3n (opcional)"}
+                          value={line.description}
+                          onChange={(e) => updateLine(group.id, line.id, "description", e.target.value)}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeLine(group.id, line.id)}
+                        className="self-end text-gray-300 transition-colors hover:text-red-400 sm:mt-2 sm:self-start"
+                        aria-label="Eliminar rengl?n"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <Button
                   type="button"
-                  onClick={() => removeCategory(cat.id)}
-                  disabled={categories.length === 1}
-                  className="self-end text-gray-300 transition-colors hover:text-red-400 disabled:opacity-30 sm:mt-2 sm:self-start"
-                  aria-label="Eliminar rengl?n"
+                  size="sm"
+                  variant="outline"
+                  className="mt-3 w-full sm:w-auto"
+                  onClick={() => addLineToGroup(group.id)}
                 >
-                  <Trash2 className="h-4 w-4" />
-                </button>
+                  <Plus className="h-3.5 w-3.5" /> Agregar rengl?n
+                </Button>
               </div>
             ))}
           </CardContent>
@@ -434,7 +555,7 @@ export default function NewProjectPage() {
               <span className="text-gray-500">Presupuesto total calculado:</span>
               <span className="font-bold text-gray-900 sm:text-right">
                 {new Intl.NumberFormat("es-GT", { style: "currency", currency: form.currency }).format(
-                  categories.reduce((s, c) => s + (parseFloat(c.budget_amount) || 0), 0)
+                  groups.reduce((s, g) => s + g.lines.reduce((t, l) => t + (parseFloat(l.budget_amount) || 0), 0), 0)
                 )}
               </span>
             </div>

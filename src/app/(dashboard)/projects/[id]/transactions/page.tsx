@@ -8,6 +8,7 @@ import { AddTransactionButton } from "@/components/projects/add-transaction-butt
 import { DeleteTransactionButton } from "@/components/projects/delete-transaction-button"
 import { TransactionFilters, TRANSACTION_PAGE_SIZE } from "@/components/projects/transaction-filters"
 import { TransactionCommentsPanel } from "@/components/projects/transaction-comments-panel"
+import { leafCategories } from "@/lib/budget-category-tree"
 import type { UserRole } from "@/lib/types"
 import Link from "next/link"
 import { ExternalLink } from "lucide-react"
@@ -42,7 +43,7 @@ export default async function TransactionsPage({
 
   const [{ data: membership }, { data: categories }, { data: txTypes }, { data: projectRow }] = await Promise.all([
     supabase.from("project_members").select("role").eq("project_id", id).eq("user_id", user.id).single(),
-    supabase.from("budget_categories").select("id, name").eq("project_id", id).order("order_index"),
+    supabase.from("budget_categories").select("id, name, parent_id").eq("project_id", id).order("order_index"),
     supabase.from("transaction_types").select("*"),
     supabase.from("projects").select("currency").eq("id", id).single(),
   ])
@@ -50,6 +51,16 @@ export default async function TransactionsPage({
   if (!membership) redirect("/dashboard")
 
   const currency = projectRow?.currency || "GTQ"
+
+  const catsRaw = categories || []
+  const catById = new Map(catsRaw.map((c) => [c.id, c]))
+  const leafCats = leafCategories(catsRaw as { id: string; parent_id?: string | null }[])
+  const categoryOptions = leafCats.map((c) => {
+    const row = c as { id: string; name: string; parent_id?: string | null }
+    const parent = row.parent_id ? (catById.get(row.parent_id) as { name?: string } | undefined) : undefined
+    const label = parent?.name ? `${parent.name} — ${row.name}` : row.name
+    return { value: row.id, label }
+  })
 
   let typeIds: string[] | null = null
   if (flow === "income" || flow === "expense") {
@@ -148,7 +159,7 @@ export default async function TransactionsPage({
 
       <TransactionFilters
         projectId={id}
-        categoryOptions={(categories || []).map((c) => ({ value: c.id, label: c.name }))}
+        categoryOptions={categoryOptions}
         initial={{ q, from, to, category, flow }}
         page={page}
         totalCount={totalCount}
@@ -164,7 +175,7 @@ export default async function TransactionsPage({
               <AddTransactionButton
                 className="shrink-0"
                 projectId={id}
-                categories={(categories || []).map((c) => ({ value: c.id, label: c.name }))}
+                categories={categoryOptions}
                 txTypes={(txTypes || []).map((t) => ({ value: t.id, label: t.name, type: t.type }))}
               />
             )}

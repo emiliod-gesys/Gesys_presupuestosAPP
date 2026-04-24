@@ -2,10 +2,48 @@ import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { formatCurrency, getBudgetStatus, budgetBarWidthPct, cn } from "@/lib/utils"
+import { budgetCategorySections } from "@/lib/budget-category-tree"
 import { ManageCategoriesButton } from "@/components/projects/manage-categories-button"
 import { BudgetAlignmentAlert } from "@/components/projects/budget-alignment-alert"
 import { BudgetExportActions } from "@/components/projects/budget-export-actions"
-import type { UserRole } from "@/lib/types"
+import type { BudgetCategory, UserRole } from "@/lib/types"
+
+function BudgetLineCard({
+  cat,
+  spentByCategory,
+  currency,
+}: {
+  cat: BudgetCategory
+  spentByCategory: Record<string, number>
+  currency: string
+}) {
+  const spent = Math.max(0, spentByCategory[cat.id] || 0)
+  const available = Number(cat.budget_amount) - spent
+  const { pct, bg, color } = getBudgetStatus(spent, cat.budget_amount)
+  return (
+    <div className="space-y-2.5 rounded-xl border border-gray-100 p-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-semibold text-gray-900">{cat.name}</p>
+          {cat.description && <p className="mt-0.5 text-xs text-gray-500">{cat.description}</p>}
+        </div>
+        <div className="text-right">
+          <p className="text-sm font-bold text-gray-900">{formatCurrency(cat.budget_amount, currency)}</p>
+          <p className={`text-xs font-medium ${color}`}>{pct.toFixed(1)}%</p>
+        </div>
+      </div>
+      <div className="h-2.5 overflow-hidden rounded-full bg-gray-100">
+        <div className={`h-full rounded-full ${bg}`} style={{ width: `${budgetBarWidthPct(pct)}%` }} />
+      </div>
+      <div className="flex justify-between text-xs text-gray-500">
+        <span className="font-medium text-red-500">Gastado: {formatCurrency(spent, currency)}</span>
+        <span className={cn("font-medium", available < 0 ? "text-red-600" : "text-green-600")}>
+          Disponible: {formatCurrency(available, currency)}
+        </span>
+      </div>
+    </div>
+  )
+}
 
 export default async function BudgetPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -110,34 +148,35 @@ export default async function BudgetPage({ params }: { params: Promise<{ id: str
           {!(categories?.length) ? (
             <p className="text-gray-400 text-sm text-center py-8">No hay renglones definidos</p>
           ) : (
-            categories.map((cat) => {
-              const spent = Math.max(0, spentByCategory[cat.id] || 0)
-              const available = Number(cat.budget_amount) - spent
-              const { pct, bg, color } = getBudgetStatus(spent, cat.budget_amount)
-              return (
-                <div key={cat.id} className="p-4 border border-gray-100 rounded-xl space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-semibold text-gray-900">{cat.name}</p>
-                      {cat.description && <p className="text-xs text-gray-500 mt-0.5">{cat.description}</p>}
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-bold text-gray-900">{formatCurrency(cat.budget_amount, project.currency)}</p>
-                      <p className={`text-xs font-medium ${color}`}>{pct.toFixed(1)}%</p>
-                    </div>
+            budgetCategorySections(categories || []).map(({ header, children }) =>
+              children.length > 0 ? (
+                <div key={header.id} className="space-y-3">
+                  <div className="rounded-lg border border-indigo-100 bg-indigo-50/70 px-3 py-2">
+                    <p className="text-sm font-semibold text-indigo-950">{header.name}</p>
+                    {header.description ? (
+                      <p className="mt-0.5 text-xs text-indigo-900/80">{header.description}</p>
+                    ) : null}
                   </div>
-                  <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
-                    <div className={`h-full rounded-full ${bg}`} style={{ width: `${budgetBarWidthPct(pct)}%` }} />
-                  </div>
-                  <div className="flex justify-between text-xs text-gray-500">
-                    <span className="text-red-500 font-medium">Gastado: {formatCurrency(spent, project.currency)}</span>
-                    <span className={cn("font-medium", available < 0 ? "text-red-600" : "text-green-600")}>
-                      Disponible: {formatCurrency(available, project.currency)}
-                    </span>
+                  <div className="space-y-4 sm:pl-1">
+                    {children.map((cat) => (
+                      <BudgetLineCard
+                        key={cat.id}
+                        cat={cat}
+                        spentByCategory={spentByCategory}
+                        currency={project.currency}
+                      />
+                    ))}
                   </div>
                 </div>
+              ) : (
+                <BudgetLineCard
+                  key={header.id}
+                  cat={header}
+                  spentByCategory={spentByCategory}
+                  currency={project.currency}
+                />
               )
-            })
+            )
           )}
         </CardContent>
       </Card>

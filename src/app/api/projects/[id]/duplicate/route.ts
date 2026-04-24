@@ -77,16 +77,30 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   })
 
   if (cats?.length) {
-    await supabase.from("budget_categories").insert(
-      cats.map((c, i) => ({
-        project_id: newId,
-        name: c.name,
-        description: c.description,
-        budget_amount: c.budget_amount,
-        parent_id: null,
-        order_index: c.order_index ?? i,
-      }))
-    )
+    const sorted = [...cats].sort((a, b) => (Number(a.order_index) || 0) - (Number(b.order_index) || 0))
+    const idMap = new Map<string, string>()
+    const pool = [...sorted]
+    let guard = 0
+    while (pool.length && guard < 500) {
+      guard += 1
+      const idx = pool.findIndex((c) => !c.parent_id || idMap.has(c.parent_id as string))
+      if (idx === -1) break
+      const c = pool.splice(idx, 1)[0]
+      const parentId = c.parent_id ? idMap.get(c.parent_id as string) ?? null : null
+      const { data: row, error: catErr } = await supabase
+        .from("budget_categories")
+        .insert({
+          project_id: newId,
+          name: c.name,
+          description: c.description,
+          budget_amount: c.budget_amount,
+          parent_id: parentId,
+          order_index: c.order_index ?? 0,
+        })
+        .select("id")
+        .single()
+      if (!catErr && row?.id) idMap.set(c.id as string, row.id as string)
+    }
   }
 
   await supabase.from("project_logs").insert({
