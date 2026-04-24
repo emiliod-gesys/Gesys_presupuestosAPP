@@ -65,7 +65,7 @@ export default async function DashboardPage() {
     if (txData) {
       txData.forEach((tx) => {
         const type = (tx.transaction_type as unknown as { type: string } | null)?.type
-        const delta = type === "expense" ? tx.amount : -tx.amount
+        const delta = type === "expense" ? tx.amount : 0
         spentByProject[tx.project_id] = (spentByProject[tx.project_id] || 0) + delta
       })
     }

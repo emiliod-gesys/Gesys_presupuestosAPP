@@ -51,7 +51,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   let totalSpent = 0
   ;(txData || []).forEach((tx) => {
     const type = (tx.transaction_type as unknown as { type: string } | null)?.type
-    const delta = type === "expense" ? tx.amount : -tx.amount
+    const delta = type === "expense" ? tx.amount : 0
     totalSpent += delta
     if (tx.category_id) spentByCategory[tx.category_id] = (spentByCategory[tx.category_id] || 0) + delta
   })

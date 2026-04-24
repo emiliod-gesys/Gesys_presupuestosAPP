@@ -15,8 +15,6 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const from = url.searchParams.get("from")
   const to = url.searchParams.get("to")
   const categoryId = url.searchParams.get("category")
-  const flow = url.searchParams.get("flow")
-
   const cookieStore = await cookies()
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -48,7 +46,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   let query = supabase
     .from("transactions")
     .select(
-      "date, description, amount, reference_number, vendor, attachment_url, notes, transaction_type:transaction_types(name, type), category:budget_categories(name)"
+      "date, description, amount, reference_number, vendor, attachment_url, notes, transaction_type:transaction_types(name), category:budget_categories(name)"
     )
     .eq("project_id", id)
     .order("date", { ascending: false })
@@ -60,10 +58,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   if (q) query = query.ilike("description", `%${q}%`)
 
   const { data: txTypes } = await supabase.from("transaction_types").select("id, type")
-  if (flow === "income" || flow === "expense") {
-    const typeIds = (txTypes || []).filter((t) => t.type === flow).map((t) => t.id)
-    if (typeIds.length > 0) query = query.in("transaction_type_id", typeIds)
-  }
+  const expenseTypeIds = (txTypes || []).filter((t) => t.type === "expense").map((t) => t.id)
+  if (expenseTypeIds.length > 0) query = query.in("transaction_type_id", expenseTypeIds)
 
   const { data: rows, error } = await query
 
@@ -72,8 +68,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const header = [
     "Fecha",
     "Descripción",
-    "Tipo",
-    "Flujo",
+    "Tipo de gasto",
     "Monto",
     "Renglón",
     "Referencia",
@@ -84,14 +79,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
   const lines = [header.join(",")]
   for (const tx of rows || []) {
-    const tt = tx.transaction_type as { name?: string; type?: string } | null
+    const tt = tx.transaction_type as { name?: string } | null
     const cat = tx.category as { name?: string } | null
     lines.push(
       [
         csvEscape(tx.date),
         csvEscape(tx.description),
         csvEscape(tt?.name),
-        csvEscape(tt?.type),
         csvEscape(tx.amount),
         csvEscape(cat?.name),
         csvEscape(tx.reference_number),

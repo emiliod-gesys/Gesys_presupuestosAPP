@@ -1,5 +1,6 @@
 export type UserRole = "admin" | "worker" | "observer"
 export type ProjectStatus = "active" | "completed" | "archived"
+/** En BD pueden existir filas `income` heredadas; la app solo opera con gastos. */
 export type TransactionFlow = "income" | "expense"
 export type InvitationStatus = "pending" | "accepted" | "rejected"
 export type NotificationType = "budget_alert" | "project_invitation" | "companion_request" | "project_update"

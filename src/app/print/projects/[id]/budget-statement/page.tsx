@@ -36,7 +36,7 @@ export default async function BudgetStatementPrintPage({ params }: { params: Pro
   let totalSpent = 0
   ;(txData || []).forEach((tx) => {
     const type = (tx.transaction_type as unknown as { type: string } | null)?.type
-    const delta = type === "expense" ? tx.amount : -tx.amount
+    const delta = type === "expense" ? tx.amount : 0
     totalSpent += delta
     if (tx.category_id) spentByCategory[tx.category_id] = (spentByCategory[tx.category_id] || 0) + delta
   })
@@ -76,7 +76,7 @@ export default async function BudgetStatementPrintPage({ params }: { params: Pro
               <td className="py-2 text-right font-semibold">{formatCurrency(sumLines, project.currency)}</td>
             </tr>
             <tr className="border-b border-gray-100">
-              <td className="py-2 pr-4 text-gray-600">Total ejecutado (gastos − ingresos netos)</td>
+              <td className="py-2 pr-4 text-gray-600">Total ejecutado (gastos)</td>
               <td className="py-2 text-right font-semibold">{formatCurrency(spentForSummary, project.currency)}</td>
             </tr>
             <tr>

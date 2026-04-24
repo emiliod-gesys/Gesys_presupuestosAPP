@@ -35,7 +35,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
   const spentByCategory: Record<string, number> = {}
   const totalSpent = (txData || []).reduce((sum, tx) => {
     const type = (tx.transaction_type as unknown as { type: string } | null)?.type
-    const delta = type === "expense" ? tx.amount : -tx.amount
+    const delta = type === "expense" ? tx.amount : 0
     if (tx.category_id) spentByCategory[tx.category_id] = (spentByCategory[tx.category_id] || 0) + delta
     return sum + delta
   }, 0)

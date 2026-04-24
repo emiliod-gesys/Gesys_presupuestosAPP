@@ -34,7 +34,6 @@ export default async function TransactionsPage({
   const from = first(sp, "from")
   const to = first(sp, "to")
   const category = first(sp, "category")
-  const flow = first(sp, "flow")
   const page = Math.max(1, parseInt(first(sp, "page") || "1", 10) || 1)
 
   const supabase = await createClient()
@@ -62,10 +61,7 @@ export default async function TransactionsPage({
     return { value: row.id, label }
   })
 
-  let typeIds: string[] | null = null
-  if (flow === "income" || flow === "expense") {
-    typeIds = (txTypes || []).filter((t) => t.type === flow).map((t) => t.id)
-  }
+  const expenseTypeIds = (txTypes || []).filter((t) => t.type === "expense").map((t) => t.id)
 
   let countQuery = supabase
     .from("transactions")
@@ -76,7 +72,7 @@ export default async function TransactionsPage({
   if (to) countQuery = countQuery.lte("date", to)
   if (category) countQuery = countQuery.eq("category_id", category)
   if (q) countQuery = countQuery.ilike("description", `%${q}%`)
-  if (typeIds && typeIds.length > 0) countQuery = countQuery.in("transaction_type_id", typeIds)
+  if (expenseTypeIds.length > 0) countQuery = countQuery.in("transaction_type_id", expenseTypeIds)
 
   const { count } = await countQuery
   const totalCount = count ?? 0
@@ -95,27 +91,23 @@ export default async function TransactionsPage({
   if (to) listQuery = listQuery.lte("date", to)
   if (category) listQuery = listQuery.eq("category_id", category)
   if (q) listQuery = listQuery.ilike("description", `%${q}%`)
-  if (typeIds && typeIds.length > 0) listQuery = listQuery.in("transaction_type_id", typeIds)
+  if (expenseTypeIds.length > 0) listQuery = listQuery.in("transaction_type_id", expenseTypeIds)
 
   const { data: transactions } = await listQuery.range(fromIdx, toIdx)
 
-  const { data: allForTotals } = await supabase
+  let totalsQuery = supabase
     .from("transactions")
     .select("amount, transaction_type:transaction_types(type)")
     .eq("project_id", id)
+  if (expenseTypeIds.length > 0) totalsQuery = totalsQuery.in("transaction_type_id", expenseTypeIds)
+  const { data: allForTotals } = await totalsQuery
 
   const role = membership.role as UserRole
   const canEdit = role === "admin" || role === "worker"
   const isAdmin = role === "admin"
 
-  const totalIncome = (allForTotals || []).reduce(
-    (s, t) => ((t.transaction_type as { type?: string } | null)?.type === "income" ? s + Number(t.amount) : s),
-    0
-  )
-  const totalExpense = (allForTotals || []).reduce(
-    (s, t) => ((t.transaction_type as { type?: string } | null)?.type === "expense" ? s + Number(t.amount) : s),
-    0
-  )
+  const totalExpense = (allForTotals || []).reduce((s, t) => s + Number(t.amount) || 0, 0)
+  const txCount = (allForTotals || []).length
 
   const txIds = (transactions || []).map((t) => t.id)
   const commentCountByTx: Record<string, number> = {}
@@ -134,13 +126,7 @@ export default async function TransactionsPage({
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
-        <Card>
-          <CardContent className="pt-5">
-            <p className="mb-1 text-xs text-gray-500">Total ingresos (proyecto)</p>
-            <p className="text-xl font-bold text-green-600">{formatCurrency(totalIncome, currency)}</p>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
         <Card>
           <CardContent className="pt-5">
             <p className="mb-1 text-xs text-gray-500">Total gastos (proyecto)</p>
@@ -149,10 +135,9 @@ export default async function TransactionsPage({
         </Card>
         <Card>
           <CardContent className="pt-5">
-            <p className="mb-1 text-xs text-gray-500">Balance (proyecto)</p>
-            <p className={`text-xl font-bold ${totalIncome - totalExpense >= 0 ? "text-indigo-700" : "text-red-600"}`}>
-              {formatCurrency(totalIncome - totalExpense, currency)}
-            </p>
+            <p className="mb-1 text-xs text-gray-500">Movimientos registrados</p>
+            <p className="text-xl font-bold text-gray-900">{txCount}</p>
+            <p className="mt-1 text-xs text-gray-400">Solo gastos; el presupuesto compara contra este total.</p>
           </CardContent>
         </Card>
       </div>
@@ -160,7 +145,7 @@ export default async function TransactionsPage({
       <TransactionFilters
         projectId={id}
         categoryOptions={categoryOptions}
-        initial={{ q, from, to, category, flow }}
+        initial={{ q, from, to, category }}
         page={page}
         totalCount={totalCount}
       />
@@ -176,7 +161,9 @@ export default async function TransactionsPage({
                 className="shrink-0"
                 projectId={id}
                 categories={categoryOptions}
-                txTypes={(txTypes || []).map((t) => ({ value: t.id, label: t.name, type: t.type }))}
+                txTypes={(txTypes || [])
+                  .filter((t) => t.type === "expense")
+                  .map((t) => ({ value: t.id, label: t.name, type: t.type }))}
               />
             )}
           </div>
@@ -203,15 +190,11 @@ export default async function TransactionsPage({
                     className="flex flex-col gap-3 px-4 py-3 transition-colors hover:bg-gray-50 sm:flex-row sm:items-start sm:gap-4 sm:px-6"
                   >
                     <div className="flex items-start gap-3 sm:contents">
-                      <div
-                        className={`mt-1.5 h-2 w-2 shrink-0 rounded-full sm:mt-0 ${txType?.type === "income" ? "bg-green-500" : "bg-red-500"}`}
-                      />
+                      <div className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-red-500 sm:mt-0" />
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="text-sm font-medium text-gray-900">{tx.description}</p>
-                          <Badge variant={txType?.type === "income" ? "success" : "danger"}>
-                            {txType?.name}
-                          </Badge>
+                          <Badge variant="danger">{txType?.name}</Badge>
                         </div>
                         <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
                           <span>{formatDate(tx.date)}</span>
@@ -243,11 +226,8 @@ export default async function TransactionsPage({
                       </div>
                     </div>
                     <div className="flex items-center justify-between gap-3 border-t border-gray-100 pt-2 sm:flex-1 sm:justify-end sm:border-t-0 sm:pt-0">
-                      <p
-                        className={`text-sm font-bold sm:text-right ${txType?.type === "income" ? "text-green-700" : "text-red-700"}`}
-                      >
-                        {txType?.type === "income" ? "+" : "-"}
-                        {formatCurrency(tx.amount, currency)}
+                      <p className="text-sm font-bold text-red-700 sm:text-right">
+                        −{formatCurrency(tx.amount, currency)}
                       </p>
                       <div className="flex shrink-0 items-center gap-2">
                         <Avatar src={creator?.avatar_url} name={creator?.full_name || creator?.email} size="xs" />
