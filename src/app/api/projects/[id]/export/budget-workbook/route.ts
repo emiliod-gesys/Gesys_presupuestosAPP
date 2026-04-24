@@ -61,7 +61,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     ["Presupuesto total del proyecto", project.total_budget],
     ["Suma de renglones", sumLines],
     ["Total ejecutado", Math.max(0, totalSpent)],
-    ["Saldo disponible (total − ejecutado)", Math.max(0, project.total_budget - Math.max(0, totalSpent))],
+    ["Saldo disponible (total − ejecutado)", Number(project.total_budget) - Math.max(0, totalSpent)],
     ["Moneda", project.currency],
   ]
 
@@ -70,7 +70,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     ...(categories || []).map((cat) => {
       const spent = Math.max(0, spentByCategory[cat.id] || 0)
       const budget = Number(cat.budget_amount) || 0
-      const avail = Math.max(0, budget - spent)
+      const avail = budget - spent
       const pct = budget > 0 ? ((spent / budget) * 100).toFixed(1) : "0"
       return [cat.name, cat.description || "", budget, spent, avail, pct]
     }),

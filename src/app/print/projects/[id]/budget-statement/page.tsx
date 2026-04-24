@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { redirect, notFound } from "next/navigation"
-import { formatCurrency, formatDate } from "@/lib/utils"
+import { formatCurrency, formatDate, cn } from "@/lib/utils"
 import { sumCategoryBudgets } from "@/lib/budget"
 import { PrintToolbar } from "@/components/projects/print-toolbar"
 
@@ -41,6 +41,8 @@ export default async function BudgetStatementPrintPage({ params }: { params: Pro
 
   const sumLines = sumCategoryBudgets(categories || [])
   const generated = new Date().toLocaleString("es-GT", { dateStyle: "long", timeStyle: "short" })
+  const spentForSummary = Math.max(0, totalSpent)
+  const totalAvailablePrint = Number(project.total_budget) - spentForSummary
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-8 print:max-w-none print:px-8 print:py-6">
@@ -73,12 +75,17 @@ export default async function BudgetStatementPrintPage({ params }: { params: Pro
             </tr>
             <tr className="border-b border-gray-100">
               <td className="py-2 pr-4 text-gray-600">Total ejecutado (gastos − ingresos netos)</td>
-              <td className="py-2 text-right font-semibold">{formatCurrency(Math.max(0, totalSpent), project.currency)}</td>
+              <td className="py-2 text-right font-semibold">{formatCurrency(spentForSummary, project.currency)}</td>
             </tr>
             <tr>
               <td className="py-2 pr-4 text-gray-600">Saldo disponible (presupuesto total − ejecutado)</td>
-              <td className="py-2 text-right font-semibold">
-                {formatCurrency(Math.max(0, project.total_budget - Math.max(0, totalSpent)), project.currency)}
+              <td
+                className={cn(
+                  "py-2 text-right font-semibold",
+                  totalAvailablePrint < 0 ? "text-red-700" : "text-gray-900"
+                )}
+              >
+                {formatCurrency(totalAvailablePrint, project.currency)}
               </td>
             </tr>
           </tbody>
@@ -109,8 +116,8 @@ export default async function BudgetStatementPrintPage({ params }: { params: Pro
                 (categories || []).map((cat) => {
                   const spent = Math.max(0, spentByCategory[cat.id] || 0)
                   const budget = Number(cat.budget_amount) || 0
-                  const avail = Math.max(0, budget - spent)
-                  const pct = budget > 0 ? Math.min(100, (spent / budget) * 100) : 0
+                  const avail = budget - spent
+                  const pct = budget > 0 ? (spent / budget) * 100 : 0
                   return (
                     <tr key={cat.id} className="border-b border-gray-100 last:border-0">
                       <td className="px-3 py-2">
@@ -119,7 +126,9 @@ export default async function BudgetStatementPrintPage({ params }: { params: Pro
                       </td>
                       <td className="px-3 py-2 text-right tabular-nums">{formatCurrency(budget, project.currency)}</td>
                       <td className="px-3 py-2 text-right tabular-nums text-red-700">{formatCurrency(spent, project.currency)}</td>
-                      <td className="px-3 py-2 text-right tabular-nums text-green-700">{formatCurrency(avail, project.currency)}</td>
+                      <td className={cn("px-3 py-2 text-right tabular-nums", avail < 0 ? "text-red-700" : "text-green-700")}>
+                        {formatCurrency(avail, project.currency)}
+                      </td>
                       <td className="px-3 py-2 text-right tabular-nums">{pct.toFixed(1)}%</td>
                     </tr>
                   )

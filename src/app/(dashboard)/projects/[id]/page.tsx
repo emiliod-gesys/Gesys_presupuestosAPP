@@ -3,7 +3,7 @@ import { redirect } from "next/navigation"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { StatusBadge } from "@/components/ui/badge"
 import { Avatar } from "@/components/ui/avatar"
-import { formatCurrency, formatDate, getBudgetStatus } from "@/lib/utils"
+import { formatCurrency, formatDate, getBudgetStatus, budgetBarWidthPct, cn } from "@/lib/utils"
 import { MapPin, Calendar, Users, Building2 } from "lucide-react"
 import { ProjectStatusActions } from "@/components/projects/project-status-actions"
 import { DuplicateProjectButton } from "@/components/projects/duplicate-project-button"
@@ -39,7 +39,9 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
     return sum + delta
   }, 0)
 
-  const { pct: totalPct, bg: totalBg } = getBudgetStatus(Math.max(0, totalSpent), project.total_budget)
+  const spentForBar = Math.max(0, totalSpent)
+  const { pct: totalPct, bg: totalBg } = getBudgetStatus(spentForBar, project.total_budget)
+  const totalAvailable = Number(project.total_budget) - spentForBar
 
   const editInfoInitial = {
     name: project.name ?? "",
@@ -117,10 +119,10 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
             <div className="p-4 bg-gray-50 rounded-xl">
               <div className="flex justify-between text-sm mb-2">
                 <span className="text-gray-500">Total ejecutado</span>
-                <span className="font-semibold">{Math.min(totalPct, 100).toFixed(1)}%</span>
+                <span className="font-semibold">{totalPct.toFixed(1)}%</span>
               </div>
               <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
-                <div className={`h-full rounded-full ${totalBg}`} style={{ width: `${Math.min(totalPct, 100)}%` }} />
+                <div className={`h-full rounded-full ${totalBg}`} style={{ width: `${budgetBarWidthPct(totalPct)}%` }} />
               </div>
               <div className="flex justify-between mt-2 text-sm">
                 <span className="text-gray-600">{formatCurrency(Math.max(0, totalSpent), project.currency)} gastado</span>
@@ -137,11 +139,12 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
                   <div className="flex justify-between text-sm mb-1">
                     <span className="text-gray-700 font-medium">{cat.name}</span>
                     <span className="text-gray-500">
-                      {formatCurrency(spent, project.currency)} / {formatCurrency(cat.budget_amount, project.currency)}
+                      {formatCurrency(spent, project.currency)} / {formatCurrency(cat.budget_amount, project.currency)} ·{" "}
+                      {pct.toFixed(1)}%
                     </span>
                   </div>
                   <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                    <div className={`h-full rounded-full ${bg}`} style={{ width: `${Math.min(pct, 100)}%` }} />
+                    <div className={`h-full rounded-full ${bg}`} style={{ width: `${budgetBarWidthPct(pct)}%` }} />
                   </div>
                 </div>
               )
@@ -198,8 +201,8 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
             </div>
             <div className="flex justify-between text-sm border-t pt-3">
               <span className="text-gray-500">Disponible</span>
-              <span className="font-bold text-green-600">
-                {formatCurrency(Math.max(0, project.total_budget - Math.max(0, totalSpent)), project.currency)}
+              <span className={cn("font-bold", totalAvailable < 0 ? "text-red-600" : "text-green-600")}>
+                {formatCurrency(totalAvailable, project.currency)}
               </span>
             </div>
           </CardContent>

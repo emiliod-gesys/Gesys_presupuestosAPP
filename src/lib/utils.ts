@@ -49,6 +49,12 @@ export function getBudgetStatus(spent: number, budget: number) {
   return { pct, color: "text-green-600", bg: "bg-green-500" }
 }
 
+/** Ancho de la barra de progreso (máx. 100 % del contenedor). El porcentaje mostrado puede ser mayor. */
+export function budgetBarWidthPct(pct: number) {
+  if (!Number.isFinite(pct) || pct <= 0) return 0
+  return Math.min(pct, 100)
+}
+
 /** Texto legible para toasts / consola (PostgREST / Supabase). */
 export function formatSupabaseError(
   error: { message: string; details?: string | null; hint?: string | null; code?: string | null } | null | undefined,

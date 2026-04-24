@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Badge, StatusBadge, RoleBadge } from "@/components/ui/badge"
 import { Avatar } from "@/components/ui/avatar"
-import { formatCurrency, formatDate, getBudgetStatus } from "@/lib/utils"
+import { formatCurrency, formatDate, getBudgetStatus, budgetBarWidthPct } from "@/lib/utils"
 import { NotificationActions } from "@/components/dashboard/notification-actions"
 import { InvitationActions } from "@/components/dashboard/invitation-actions"
 
@@ -174,12 +174,12 @@ export default async function DashboardPage() {
                         <div className="space-y-1.5">
                           <div className="flex justify-between text-xs text-gray-500">
                             <span>Presupuesto ejecutado</span>
-                            <span className="font-medium">{Math.min(pct, 100).toFixed(1)}%</span>
+                            <span className="font-medium">{pct.toFixed(1)}%</span>
                           </div>
                           <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                             <div
                               className={`h-full rounded-full transition-all ${bg}`}
-                              style={{ width: `${Math.min(pct, 100)}%` }}
+                              style={{ width: `${budgetBarWidthPct(pct)}%` }}
                             />
                           </div>
                           <div className="flex justify-between text-xs">

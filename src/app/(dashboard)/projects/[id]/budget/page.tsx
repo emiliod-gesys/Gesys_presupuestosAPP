@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
-import { formatCurrency, getBudgetStatus } from "@/lib/utils"
+import { formatCurrency, getBudgetStatus, budgetBarWidthPct, cn } from "@/lib/utils"
 import { ManageCategoriesButton } from "@/components/projects/manage-categories-button"
 import { BudgetAlignmentAlert } from "@/components/projects/budget-alignment-alert"
 import { BudgetExportActions } from "@/components/projects/budget-export-actions"
@@ -36,7 +36,9 @@ export default async function BudgetPage({ params }: { params: Promise<{ id: str
   })
 
   const role = membership.role as UserRole
-  const { pct: totalPct, bg: totalBg, color: totalColor } = getBudgetStatus(Math.max(0, totalSpent), project.total_budget)
+  const spentForBar = Math.max(0, totalSpent)
+  const { pct: totalPct, bg: totalBg, color: totalColor } = getBudgetStatus(spentForBar, project.total_budget)
+  const totalAvailable = Number(project.total_budget) - spentForBar
 
   return (
     <div className="space-y-6">
@@ -78,11 +80,11 @@ export default async function BudgetPage({ params }: { params: Promise<{ id: str
               {formatCurrency(project.total_budget, project.currency)}
             </span>
             <span className={`text-base font-semibold sm:text-lg ${totalColor}`}>
-              {Math.min(totalPct, 100).toFixed(1)}% ejecutado
+              {totalPct.toFixed(1)}% ejecutado
             </span>
           </div>
           <div className="h-4 bg-gray-100 rounded-full overflow-hidden">
-            <div className={`h-full rounded-full transition-all ${totalBg}`} style={{ width: `${Math.min(totalPct, 100)}%` }} />
+            <div className={`h-full rounded-full transition-all ${totalBg}`} style={{ width: `${budgetBarWidthPct(totalPct)}%` }} />
           </div>
           <div className="flex justify-between mt-3 text-sm">
             <div>
@@ -91,7 +93,9 @@ export default async function BudgetPage({ params }: { params: Promise<{ id: str
             </div>
             <div className="text-right">
               <p className="text-gray-500 text-xs">Disponible</p>
-              <p className="font-semibold text-green-600">{formatCurrency(Math.max(0, project.total_budget - Math.max(0, totalSpent)), project.currency)}</p>
+              <p className={cn("font-semibold", totalAvailable < 0 ? "text-red-600" : "text-green-600")}>
+                {formatCurrency(totalAvailable, project.currency)}
+              </p>
             </div>
           </div>
         </CardContent>
@@ -108,7 +112,7 @@ export default async function BudgetPage({ params }: { params: Promise<{ id: str
           ) : (
             categories.map((cat) => {
               const spent = Math.max(0, spentByCategory[cat.id] || 0)
-              const available = Math.max(0, cat.budget_amount - spent)
+              const available = Number(cat.budget_amount) - spent
               const { pct, bg, color } = getBudgetStatus(spent, cat.budget_amount)
               return (
                 <div key={cat.id} className="p-4 border border-gray-100 rounded-xl space-y-2.5">
@@ -119,15 +123,17 @@ export default async function BudgetPage({ params }: { params: Promise<{ id: str
                     </div>
                     <div className="text-right">
                       <p className="text-sm font-bold text-gray-900">{formatCurrency(cat.budget_amount, project.currency)}</p>
-                      <p className={`text-xs font-medium ${color}`}>{Math.min(pct, 100).toFixed(1)}%</p>
+                      <p className={`text-xs font-medium ${color}`}>{pct.toFixed(1)}%</p>
                     </div>
                   </div>
                   <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
-                    <div className={`h-full rounded-full ${bg}`} style={{ width: `${Math.min(pct, 100)}%` }} />
+                    <div className={`h-full rounded-full ${bg}`} style={{ width: `${budgetBarWidthPct(pct)}%` }} />
                   </div>
                   <div className="flex justify-between text-xs text-gray-500">
                     <span className="text-red-500 font-medium">Gastado: {formatCurrency(spent, project.currency)}</span>
-                    <span className="text-green-600 font-medium">Disponible: {formatCurrency(available, project.currency)}</span>
+                    <span className={cn("font-medium", available < 0 ? "text-red-600" : "text-green-600")}>
+                      Disponible: {formatCurrency(available, project.currency)}
+                    </span>
                   </div>
                 </div>
               )
