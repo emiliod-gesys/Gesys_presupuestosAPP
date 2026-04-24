@@ -67,7 +67,8 @@ export default async function TransactionsPage({
   if (q) countQuery = countQuery.ilike("description", `%${q}%`)
   if (typeIds && typeIds.length > 0) countQuery = countQuery.in("transaction_type_id", typeIds)
 
-  const { count: totalCount = 0 } = await countQuery
+  const { count } = await countQuery
+  const totalCount = count ?? 0
 
   const fromIdx = (page - 1) * TRANSACTION_PAGE_SIZE
   const toIdx = fromIdx + TRANSACTION_PAGE_SIZE - 1
