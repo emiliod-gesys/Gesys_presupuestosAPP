@@ -243,7 +243,7 @@ export default async function DashboardPage() {
                         De: {(inv.inviter as { full_name?: string; email: string }).full_name || (inv.inviter as { email: string }).email}
                         {" · "}<RoleBadge role={inv.role} />
                       </p>
-                      <InvitationActions invitationId={inv.id} projectId={(inv.project as { id?: string })?.id || ""} />
+                      <InvitationActions invitationId={inv.id} />
                     </div>
                   ))}
                 </div>

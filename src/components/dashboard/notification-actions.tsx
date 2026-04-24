@@ -99,7 +99,7 @@ function ProjectInvitationNotification({ notification }: { notification: Notific
         <p className="mt-1 text-xs text-gray-400">{formatDateTime(notification.created_at)}</p>
         {invitationId && notification.project_id ? (
           <div className="mt-2">
-            <InvitationActions invitationId={invitationId} projectId={notification.project_id} />
+            <InvitationActions invitationId={invitationId} />
           </div>
         ) : (
           <p className="mt-2 text-xs text-gray-500">Esta invitación ya no está pendiente o no está disponible.</p>
