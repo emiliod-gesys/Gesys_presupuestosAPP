@@ -34,6 +34,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: "Solo administradores pueden editar el proyecto" }, { status: 403 })
   }
 
+  const { data: existing } = await supabase.from("projects").select("status").eq("id", id).single()
+  if (existing?.status === "archived") {
+    return NextResponse.json(
+      { error: "Proyecto archivado: reactívalo desde el resumen para editar la ficha." },
+      { status: 403 }
+    )
+  }
+
   const json = (await req.json().catch(() => null)) as Record<string, unknown> | null
   if (!json || typeof json !== "object") {
     return NextResponse.json({ error: "Cuerpo inválido" }, { status: 400 })
@@ -113,7 +121,12 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   }
 
   const { error } = await supabase.from("projects").delete().eq("id", id)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    return NextResponse.json(
+      { error: error.message, code: error.code, hint: error.hint },
+      { status: 500 }
+    )
+  }
 
   return NextResponse.json({ ok: true })
 }

@@ -29,9 +29,10 @@ export default async function AlertsPage({ params }: { params: Promise<{ id: str
       .eq("project_id", id)
       .order("threshold_percentage"),
     supabase.from("budget_categories").select("id, name, budget_amount, parent_id").eq("project_id", id).order("order_index"),
-    supabase.from("projects").select("currency").eq("id", id).single(),
+    supabase.from("projects").select("currency, status").eq("id", id).single(),
   ])
 
+  const readOnly = project?.status === "archived"
   const cats = categories || []
   const alertCategoryOptions = leafCategories(cats as { id: string; parent_id?: string | null }[]).map((c) => {
     const row = c as { id: string; name: string; parent_id?: string | null }
@@ -51,7 +52,7 @@ export default async function AlertsPage({ params }: { params: Promise<{ id: str
                 Alertas de presupuesto ({alerts?.length || 0})
               </h2>
             </div>
-            <CreateAlertButton projectId={id} categories={alertCategoryOptions} />
+            {!readOnly && <CreateAlertButton projectId={id} categories={alertCategoryOptions} />}
           </div>
           <p className="text-xs text-gray-500 mt-1">
             Recibe notificaciones automáticas cuando un renglón alcance el porcentaje configurado.
@@ -90,7 +91,7 @@ export default async function AlertsPage({ params }: { params: Promise<{ id: str
                     }`}>
                       {alert.is_active ? "Activa" : "Inactiva"}
                     </div>
-                    <DeleteAlertButton alertId={alert.id} />
+                    {!readOnly && <DeleteAlertButton alertId={alert.id} />}
                   </div>
                 )
               })}

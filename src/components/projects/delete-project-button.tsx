@@ -19,7 +19,9 @@ export function DeleteProjectButton({ projectId, projectName }: { projectId: str
       const res = await fetch(`/api/projects/${projectId}`, { method: "DELETE", credentials: "include" })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
-        toast("error", (data as { error?: string }).error || "No se pudo eliminar el proyecto")
+        const d = data as { error?: string; hint?: string; code?: string }
+        const extra = d.hint ? ` ${d.hint}` : d.code ? ` (${d.code})` : ""
+        toast("error", (d.error || "No se pudo eliminar el proyecto") + extra)
         return
       }
       toast("success", "Proyecto eliminado")

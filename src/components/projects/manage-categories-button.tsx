@@ -14,6 +14,7 @@ import type { BudgetCategory } from "@/lib/types"
 interface Props {
   projectId: string
   categories: BudgetCategory[]
+  readOnly?: boolean
 }
 
 interface CategoryRow {
@@ -40,7 +41,7 @@ function rowsFromCategories(cats: BudgetCategory[]): CategoryRow[] {
   }))
 }
 
-export function ManageCategoriesButton({ projectId, categories }: Props) {
+export function ManageCategoriesButton({ projectId, categories, readOnly }: Props) {
   const router = useRouter()
   const { toast } = useToast()
   const [open, setOpen] = useState(false)
@@ -170,6 +171,14 @@ export function ManageCategoriesButton({ projectId, categories }: Props) {
 
   const visible = rows.filter((r) => !r.toDelete)
   const total = visible.reduce((s, r) => s + (parseFloat(r.budget_amount) || 0), 0)
+
+  if (readOnly) {
+    return (
+      <Button variant="outline" size="sm" type="button" disabled className="cursor-not-allowed opacity-60" title="Proyecto archivado">
+        <Settings className="h-3.5 w-3.5" /> Solo consulta
+      </Button>
+    )
+  }
 
   return (
     <>

@@ -14,22 +14,25 @@ export default async function MembersPage({ params }: { params: Promise<{ id: st
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect("/login")
 
-  const [{ data: membership }, { data: members }, { data: pendingInvitations }] = await Promise.all([
-    supabase.from("project_members").select("role").eq("project_id", id).eq("user_id", user.id).single(),
-    supabase
-      .from("project_members")
-      .select("*, user:profiles(full_name, email, avatar_url)")
-      .eq("project_id", id)
-      .order("joined_at"),
-    supabase
-      .from("project_invitations")
-      .select("*, invitee:profiles!invitee_id(full_name, email, avatar_url)")
-      .eq("project_id", id)
-      .eq("status", "pending"),
-  ])
+  const [{ data: membership }, { data: members }, { data: pendingInvitations }, { data: projectRow }] =
+    await Promise.all([
+      supabase.from("project_members").select("role").eq("project_id", id).eq("user_id", user.id).single(),
+      supabase
+        .from("project_members")
+        .select("*, user:profiles(full_name, email, avatar_url)")
+        .eq("project_id", id)
+        .order("joined_at"),
+      supabase
+        .from("project_invitations")
+        .select("*, invitee:profiles!invitee_id(full_name, email, avatar_url)")
+        .eq("project_id", id)
+        .eq("status", "pending"),
+      supabase.from("projects").select("status").eq("id", id).single(),
+    ])
 
   if (!membership) redirect("/dashboard")
   const isAdmin = membership.role === "admin"
+  const readOnly = projectRow?.status === "archived"
 
   return (
     <div className="space-y-6">
@@ -39,7 +42,7 @@ export default async function MembersPage({ params }: { params: Promise<{ id: st
             <h2 className="text-sm font-semibold text-gray-900">
               Miembros del proyecto ({members?.length || 0})
             </h2>
-            {isAdmin && <InviteMemberButton projectId={id} />}
+            {isAdmin && !readOnly && <InviteMemberButton projectId={id} />}
           </div>
         </CardHeader>
         <CardContent className="p-0">
@@ -59,7 +62,7 @@ export default async function MembersPage({ params }: { params: Promise<{ id: st
                     <p className="text-xs text-gray-400 mt-0.5">Miembro desde {formatDateTime(m.joined_at)}</p>
                   </div>
                   <RoleBadge role={m.role as UserRole} />
-                  {isAdmin && !isSelf && (
+                  {isAdmin && !isSelf && !readOnly && (
                     <RemoveMemberButton memberId={m.id} projectId={id} userName={u?.full_name || u?.email || "este miembro"} />
                   )}
                 </div>

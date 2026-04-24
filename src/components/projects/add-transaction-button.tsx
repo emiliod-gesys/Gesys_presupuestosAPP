@@ -17,9 +17,11 @@ interface Props {
   categories: { value: string; label: string }[]
   txTypes: { value: string; label: string; type: string }[]
   className?: string
+  /** Proyecto archivado: no permitir registrar movimientos */
+  readOnly?: boolean
 }
 
-export function AddTransactionButton({ projectId, categories, txTypes, className }: Props) {
+export function AddTransactionButton({ projectId, categories, txTypes, className, readOnly }: Props) {
   const router = useRouter()
   const { toast } = useToast()
   const [open, setOpen] = useState(false)
@@ -80,6 +82,14 @@ export function AddTransactionButton({ projectId, categories, txTypes, className
       router.refresh()
     }
     setLoading(false)
+  }
+
+  if (readOnly) {
+    return (
+      <Button size="sm" variant="outline" className={cn("w-full cursor-not-allowed opacity-60 sm:w-auto", className)} disabled type="button" title="Proyecto archivado">
+        <Plus className="h-3.5 w-3.5" /> Solo consulta
+      </Button>
+    )
   }
 
   return (

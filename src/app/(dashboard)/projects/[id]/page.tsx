@@ -26,6 +26,8 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
 
   if (!project || !membership) redirect("/dashboard")
 
+  const readOnly = project.status === "archived"
+
   // Get spending per category
   const { data: txData } = await supabase
     .from("transactions")
@@ -69,8 +71,8 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
               </div>
               {membership.role === "admin" && (
                 <div className="flex w-full flex-col gap-2 sm:ml-auto sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
-                  <EditProjectInfoButton projectId={id} initial={editInfoInitial} />
-                  <DuplicateProjectButton projectId={id} />
+                  {!readOnly && <EditProjectInfoButton projectId={id} initial={editInfoInitial} />}
+                  {!readOnly && <DuplicateProjectButton projectId={id} />}
                   <ProjectStatusActions projectId={id} currentStatus={project.status} />
                   <DeleteProjectButton projectId={id} projectName={project.name} />
                 </div>

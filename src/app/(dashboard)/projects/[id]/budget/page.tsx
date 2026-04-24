@@ -53,7 +53,7 @@ export default async function BudgetPage({ params }: { params: Promise<{ id: str
 
   const [{ data: membership }, { data: project }, { data: categories }] = await Promise.all([
     supabase.from("project_members").select("role").eq("project_id", id).eq("user_id", user.id).single(),
-    supabase.from("projects").select("total_budget, currency, name").eq("id", id).single(),
+    supabase.from("projects").select("total_budget, currency, name, status").eq("id", id).single(),
     supabase.from("budget_categories").select("*").eq("project_id", id).order("order_index"),
   ])
 
@@ -74,6 +74,7 @@ export default async function BudgetPage({ params }: { params: Promise<{ id: str
   })
 
   const role = membership.role as UserRole
+  const readOnly = project.status === "archived"
   const spentForBar = Math.max(0, totalSpent)
   const { pct: totalPct, bg: totalBg, color: totalColor } = getBudgetStatus(spentForBar, project.total_budget)
   const totalAvailable = Number(project.total_budget) - spentForBar
@@ -86,6 +87,7 @@ export default async function BudgetPage({ params }: { params: Promise<{ id: str
         currency={project.currency}
         categories={categories || []}
         role={role}
+        readOnly={readOnly}
       />
 
       <Card>
@@ -109,7 +111,7 @@ export default async function BudgetPage({ params }: { params: Promise<{ id: str
             <h2 className="text-sm font-semibold text-gray-900">Presupuesto total del proyecto</h2>
             {role === "admin" && (
               <div className="w-full sm:w-auto">
-                <ManageCategoriesButton projectId={id} categories={categories || []} />
+                <ManageCategoriesButton projectId={id} categories={categories || []} readOnly={readOnly} />
               </div>
             )}
           </div>

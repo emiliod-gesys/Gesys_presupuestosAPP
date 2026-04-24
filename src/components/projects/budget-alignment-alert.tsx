@@ -14,12 +14,14 @@ export function BudgetAlignmentAlert({
   currency,
   categories,
   role,
+  readOnly = false,
 }: {
   projectId: string
   projectTotalBudget: number
   currency: string
   categories: Cat[] | null
   role: UserRole
+  readOnly?: boolean
 }) {
   const sumLines = sumCategoryBudgets(categories)
   if (isBudgetAligned(projectTotalBudget, categories)) return null
@@ -43,7 +45,7 @@ export function BudgetAlignmentAlert({
         Conviene alinear cifras para informes y control. Puedes ajustar renglones en &quot;Gestionar categorías&quot; o
         igualar el total del proyecto a la suma de renglones.
       </p>
-      {role === "admin" && (
+      {role === "admin" && !readOnly && (
         <div className="mt-3">
           <SyncProjectBudgetButton projectId={projectId} sumFromCategories={sumLines} />
         </div>

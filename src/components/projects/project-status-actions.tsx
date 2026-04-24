@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/components/ui/toast"
-import { CheckCircle, Archive, RotateCcw, ChevronDown } from "lucide-react"
+import { CheckCircle, Archive, RotateCcw, ChevronDown, type LucideIcon } from "lucide-react"
 
 interface Props {
   projectId: string
@@ -22,26 +22,76 @@ export function ProjectStatusActions({ projectId, currentStatus }: Props) {
     setLoading(true)
     setOpen(false)
     const supabase = createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    await supabase.from("projects").update({ status, updated_at: new Date().toISOString() }).eq("id", projectId)
-    if (user) {
-      await supabase.from("project_logs").insert({
-        project_id: projectId,
-        user_id: user.id,
-        action: "status_changed",
-        details: { from: currentStatus, to: status },
-      })
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    const reactivating = currentStatus === "archived" && status === "active"
+
+    if (reactivating) {
+      const { error } = await supabase
+        .from("projects")
+        .update({ status, updated_at: new Date().toISOString() })
+        .eq("id", projectId)
+      if (error) {
+        toast("error", error.message || "No se pudo reactivar el proyecto")
+        setLoading(false)
+        return
+      }
+      if (user) {
+        await supabase.from("project_logs").insert({
+          project_id: projectId,
+          user_id: user.id,
+          action: "status_changed",
+          details: { from: currentStatus, to: status },
+        })
+      }
+    } else {
+      if (user) {
+        const { error: logErr } = await supabase.from("project_logs").insert({
+          project_id: projectId,
+          user_id: user.id,
+          action: "status_changed",
+          details: { from: currentStatus, to: status },
+        })
+        if (logErr) {
+          toast("error", logErr.message || "No se pudo registrar el cambio de estado")
+          setLoading(false)
+          return
+        }
+      }
+      const { error } = await supabase
+        .from("projects")
+        .update({ status, updated_at: new Date().toISOString() })
+        .eq("id", projectId)
+      if (error) {
+        toast("error", error.message || "No se pudo actualizar el estado")
+        setLoading(false)
+        return
+      }
     }
+
     toast("success", "Estado del proyecto actualizado")
     setLoading(false)
     router.refresh()
   }
 
-  const options = [
-    { status: "active", label: "Marcar como activo", icon: RotateCcw, show: currentStatus !== "active" },
-    { status: "completed", label: "Marcar como completado", icon: CheckCircle, show: currentStatus !== "completed" },
-    { status: "archived", label: "Archivar proyecto", icon: Archive, show: currentStatus !== "archived" },
-  ].filter((o) => o.show)
+  type StatusOpt = { status: string; label: string; icon: LucideIcon }
+
+  const options: StatusOpt[] =
+    currentStatus === "archived"
+      ? [{ status: "active", label: "Volver a activo", icon: RotateCcw }]
+      : [
+          ...(currentStatus !== "active"
+            ? [{ status: "active", label: "Marcar como activo", icon: RotateCcw }]
+            : []),
+          ...(currentStatus !== "completed"
+            ? [{ status: "completed", label: "Marcar como completado", icon: CheckCircle }]
+            : []),
+          ...(currentStatus !== "archived"
+            ? [{ status: "archived", label: "Archivar proyecto", icon: Archive }]
+            : []),
+        ]
 
   return (
     <div className="relative">

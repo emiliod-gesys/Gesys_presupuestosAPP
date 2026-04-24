@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server"
 import { redirect, notFound } from "next/navigation"
 import Link from "next/link"
 import { ProjectNav } from "@/components/projects/project-nav"
+import { ProjectArchiveBanner } from "@/components/projects/project-archive-banner"
 
 export default async function ProjectLayout({
   children,
@@ -41,6 +42,7 @@ export default async function ProjectLayout({
         <span className="shrink-0">/</span>
         <span className="min-w-0 font-medium text-gray-900">{project.name}</span>
       </div>
+      <ProjectArchiveBanner show={project.status === "archived"} />
       <ProjectNav projectId={id} role={membership.role} projectName={project.name} />
       {children}
     </div>

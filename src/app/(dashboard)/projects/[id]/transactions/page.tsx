@@ -44,12 +44,13 @@ export default async function TransactionsPage({
     supabase.from("project_members").select("role").eq("project_id", id).eq("user_id", user.id).single(),
     supabase.from("budget_categories").select("id, name, parent_id").eq("project_id", id).order("order_index"),
     supabase.from("transaction_types").select("*"),
-    supabase.from("projects").select("currency").eq("id", id).single(),
+    supabase.from("projects").select("currency, status").eq("id", id).single(),
   ])
 
   if (!membership) redirect("/dashboard")
 
   const currency = projectRow?.currency || "GTQ"
+  const readOnly = projectRow?.status === "archived"
 
   const catsRaw = categories || []
   const catById = new Map(catsRaw.map((c) => [c.id, c]))
@@ -103,7 +104,8 @@ export default async function TransactionsPage({
   const { data: allForTotals } = await totalsQuery
 
   const role = membership.role as UserRole
-  const canEdit = role === "admin" || role === "worker"
+  const canMutate = role === "admin" || role === "worker"
+  const canEdit = canMutate && !readOnly
   const isAdmin = role === "admin"
 
   const totalExpense = (allForTotals || []).reduce((s, t) => s + Number(t.amount) || 0, 0)
@@ -156,11 +158,12 @@ export default async function TransactionsPage({
             <h2 className="text-sm font-semibold text-gray-900">
               Transacciones · {totalCount} en total
             </h2>
-            {canEdit && (
+            {canMutate && (
               <AddTransactionButton
                 className="shrink-0"
                 projectId={id}
                 categories={categoryOptions}
+                readOnly={readOnly}
                 txTypes={(txTypes || [])
                   .filter((t) => t.type === "expense")
                   .map((t) => ({ value: t.id, label: t.name, type: t.type }))}
@@ -174,6 +177,9 @@ export default async function TransactionsPage({
               <p className="font-medium">Sin transacciones con estos criterios</p>
               {canEdit && totalCount === 0 && (
                 <p className="mt-1 text-sm">Registra la primera transacción del proyecto</p>
+              )}
+              {readOnly && totalCount === 0 && (
+                <p className="mt-1 text-sm text-amber-800">Proyecto archivado: no se pueden añadir transacciones.</p>
               )}
             </div>
           ) : (
@@ -231,7 +237,7 @@ export default async function TransactionsPage({
                       </p>
                       <div className="flex shrink-0 items-center gap-2">
                         <Avatar src={creator?.avatar_url} name={creator?.full_name || creator?.email} size="xs" />
-                        {(role === "admin" || tx.created_by === user.id) && (
+                        {(role === "admin" || tx.created_by === user.id) && canEdit && (
                           <DeleteTransactionButton transactionId={tx.id} />
                         )}
                       </div>
