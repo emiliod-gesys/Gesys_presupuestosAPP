@@ -9,9 +9,7 @@ export function BudgetExportActions({ projectId }: { projectId: string }) {
   const { toast } = useToast()
   const [busy, setBusy] = useState<null | "xlsx">(null)
 
-  const openPrint = () => {
-    window.open(`/print/projects/${projectId}/budget-statement`, "_blank", "noopener,noreferrer")
-  }
+  const printHref = `/print/projects/${projectId}/budget-statement`
 
   const downloadXlsx = async () => {
     setBusy("xlsx")
@@ -41,10 +39,15 @@ export function BudgetExportActions({ projectId }: { projectId: string }) {
 
   return (
     <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-      <Button type="button" variant="outline" size="sm" className="w-full sm:w-auto" onClick={openPrint}>
+      <a
+        href={printHref}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 sm:w-auto"
+      >
         <Printer className="h-4 w-4" />
         Imprimir / PDF
-      </Button>
+      </a>
       <Button
         type="button"
         variant="outline"
