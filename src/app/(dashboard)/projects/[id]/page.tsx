@@ -6,6 +6,7 @@ import { Avatar } from "@/components/ui/avatar"
 import { formatCurrency, formatDate, getBudgetStatus } from "@/lib/utils"
 import { MapPin, Calendar, Users, Building2 } from "lucide-react"
 import { ProjectStatusActions } from "@/components/projects/project-status-actions"
+import { DuplicateProjectButton } from "@/components/projects/duplicate-project-button"
 
 export default async function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -54,7 +55,8 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
                 )}
               </div>
               {membership.role === "admin" && (
-                <div className="w-full sm:w-auto">
+                <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+                  <DuplicateProjectButton projectId={id} />
                   <ProjectStatusActions projectId={id} currentStatus={project.status} />
                 </div>
               )}

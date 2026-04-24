@@ -74,6 +74,54 @@ export default async function DashboardPage() {
         </Link>
       </div>
 
+      {memberships && memberships.length > 0 ? (() => {
+        let totalBudgetSum = 0
+        let totalSpentSum = 0
+        let atRiskCount = 0
+        const currencies = new Set<string>()
+        for (const m of memberships) {
+          const p = m.project as { id: string; total_budget: number; currency: string }
+          const b = Number(p.total_budget) || 0
+          totalBudgetSum += b
+          const spent = Math.max(0, spentByProject[p.id] || 0)
+          totalSpentSum += spent
+          currencies.add(p.currency || "GTQ")
+          const pct = b > 0 ? (spent / b) * 100 : 0
+          if (pct >= 75) atRiskCount++
+        }
+        const mixedCurrency = currencies.size > 1
+        const globalPct = totalBudgetSum > 0 ? (totalSpentSum / totalBudgetSum) * 100 : 0
+        return (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <Card>
+              <CardContent className="py-4">
+                <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Resumen</p>
+                <p className="mt-1 text-2xl font-bold text-gray-900">{memberships.length}</p>
+                <p className="text-xs text-gray-500">proyectos en tu cuenta</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="py-4">
+                <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Ejecución global</p>
+                <p className="mt-1 text-2xl font-bold text-gray-900">{globalPct.toFixed(0)}%</p>
+                <p className="text-xs text-gray-500">
+                  {mixedCurrency
+                    ? "Suma de montos (varias monedas mezcladas; referencia aproximada)."
+                    : "Sobre la suma de presupuestos de proyecto."}
+                </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="py-4">
+                <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Seguimiento</p>
+                <p className="mt-1 text-2xl font-bold text-amber-700">{atRiskCount}</p>
+                <p className="text-xs text-gray-500">proyectos con ejecución ≥ 75%</p>
+              </CardContent>
+            </Card>
+          </div>
+        )
+      })() : null}
+
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         {/* Projects grid - 2/3 width */}
         <div className="xl:col-span-2 space-y-4">

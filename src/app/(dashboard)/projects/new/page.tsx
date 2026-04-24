@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select } from "@/components/ui/select"
 import { Card, CardContent, CardHeader, CardFooter } from "@/components/ui/card"
 import { useToast } from "@/components/ui/toast"
-import { ArrowLeft, Plus, Trash2 } from "lucide-react"
+import { ArrowLeft, Plus, Trash2, Upload } from "lucide-react"
 import Link from "next/link"
 import { formatSupabaseError } from "@/lib/utils"
 
@@ -25,9 +25,59 @@ interface Template {
   name: string
 }
 
+function parseCsvLine(line: string): string[] {
+  const result: string[] = []
+  let cur = ""
+  let inQuotes = false
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i]
+    if (c === '"') {
+      inQuotes = !inQuotes
+      continue
+    }
+    if (c === "," && !inQuotes) {
+      result.push(cur.trim())
+      cur = ""
+      continue
+    }
+    cur += c
+  }
+  result.push(cur.trim())
+  return result.map((s) => s.replace(/^"|"$/g, "").trim())
+}
+
+/** Columnas: nombre, monto [, descripci?n]. Primera fila puede ser cabecera (nombre/name, monto/budget_amount). */
+function parseBudgetCategoryCsv(text: string): { name: string; budget_amount: string; description: string }[] {
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.length > 0)
+  if (!lines.length) return []
+  let start = 0
+  const header = lines[0].toLowerCase()
+  if (
+    header.includes("nombre") ||
+    header.includes("name") ||
+    header.includes("monto") ||
+    header.includes("budget") ||
+    header.includes("descrip")
+  ) {
+    start = 1
+  }
+  const out: { name: string; budget_amount: string; description: string }[] = []
+  for (let i = start; i < lines.length; i++) {
+    const cells = parseCsvLine(lines[i])
+    const name = (cells[0] || "").trim()
+    if (!name) continue
+    const rawAmount = cells[1] !== undefined ? String(cells[1]).trim().replace(/,/g, "") : ""
+    const amount = rawAmount === "" ? "0" : rawAmount
+    const description = cells.slice(2).join(",").trim()
+    out.push({ name, budget_amount: amount, description })
+  }
+  return out
+}
+
 export default function NewProjectPage() {
   const router = useRouter()
   const { toast } = useToast()
+  const csvInputRef = useRef<HTMLInputElement>(null)
   const [loading, setLoading] = useState(false)
   const [templates, setTemplates] = useState<Template[]>([])
   const [selectedTemplate, setSelectedTemplate] = useState("")
@@ -91,6 +141,35 @@ export default function NewProjectPage() {
 
   const updateCategory = (id: string, field: keyof CategoryRow, value: string) => {
     setCategories(categories.map((c) => c.id === id ? { ...c, [field]: value } : c))
+  }
+
+  const onCsvSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ""
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      const text = String(reader.result || "")
+      const parsed = parseBudgetCategoryCsv(text)
+      if (!parsed.length) {
+        toast(
+          "error",
+          "No se encontraron filas v?lidas. Use CSV con columnas: nombre, monto, descripci?n (opcional)."
+        )
+        return
+      }
+      setCategories(
+        parsed.map((r, i) => ({
+          id: `csv-${Date.now()}-${i}`,
+          name: r.name,
+          description: r.description,
+          budget_amount: r.budget_amount,
+        }))
+      )
+      toast("success", `Importados ${parsed.length} renglones`)
+    }
+    reader.onerror = () => toast("error", "No se pudo leer el archivo")
+    reader.readAsText(file, "UTF-8")
   }
 
   const handleSubmit = async (e: React.FormEvent, saveAsTemplate = false) => {
@@ -286,10 +365,32 @@ export default function NewProjectPage() {
               <div className="min-w-0">
                 <h2 className="text-sm font-semibold text-gray-900">Renglones del presupuesto</h2>
                 <p className="mt-0.5 text-xs text-gray-500">{"El presupuesto total se calcular\u00e1 autom\u00e1ticamente"}</p>
+                <p className="mt-1 text-xs text-gray-400">
+                  CSV: <span className="font-mono">nombre,monto,descripcion</span> (cabecera opcional).
+                </p>
               </div>
-              <Button type="button" size="sm" variant="outline" onClick={addCategory} className="w-full shrink-0 sm:w-auto">
-                <Plus className="h-3.5 w-3.5" /> {"Agregar rengl\u00f3n"}
-              </Button>
+              <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row">
+                <input
+                  ref={csvInputRef}
+                  type="file"
+                  accept=".csv,text/csv"
+                  className="hidden"
+                  onChange={onCsvSelected}
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => csvInputRef.current?.click()}
+                  className="w-full sm:w-auto"
+                >
+                  <Upload className="h-3.5 w-3.5" />
+                  Importar CSV
+                </Button>
+                <Button type="button" size="sm" variant="outline" onClick={addCategory} className="w-full sm:w-auto">
+                  <Plus className="h-3.5 w-3.5" /> {"Agregar rengl\u00f3n"}
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-3">

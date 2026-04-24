@@ -10,7 +10,7 @@ import { Modal } from "@/components/ui/modal"
 import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/components/ui/toast"
 import { Plus } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { cn, formatSupabaseError } from "@/lib/utils"
 
 interface Props {
   projectId: string
@@ -31,6 +31,8 @@ export function AddTransactionButton({ projectId, categories, txTypes, className
     transaction_type_id: "",
     category_id: "",
     reference_number: "",
+    vendor: "",
+    attachment_url: "",
     notes: "",
   })
 
@@ -53,19 +55,27 @@ export function AddTransactionButton({ projectId, categories, txTypes, className
       transaction_type_id: form.transaction_type_id,
       category_id: form.category_id || null,
       reference_number: form.reference_number || null,
+      vendor: form.vendor.trim() || null,
+      attachment_url: form.attachment_url.trim() || null,
       notes: form.notes || null,
       created_by: user.id,
     })
 
     if (error) {
-      toast("error", "Error al registrar la transacción")
+      toast("error", formatSupabaseError(error, "Error al registrar la transacción"))
     } else {
       toast("success", "Transacción registrada")
       setOpen(false)
       setForm({
-        description: "", amount: "",
+        description: "",
+        amount: "",
         date: new Date().toISOString().split("T")[0],
-        transaction_type_id: "", category_id: "", reference_number: "", notes: "",
+        transaction_type_id: "",
+        category_id: "",
+        reference_number: "",
+        vendor: "",
+        attachment_url: "",
+        notes: "",
       })
       router.refresh()
     }
@@ -128,6 +138,18 @@ export function AddTransactionButton({ projectId, categories, txTypes, className
             placeholder="Ej: FAC-001"
             value={form.reference_number}
             onChange={(e) => setForm({ ...form, reference_number: e.target.value })}
+          />
+          <Input
+            label="Proveedor / contratista"
+            placeholder="Opcional"
+            value={form.vendor}
+            onChange={(e) => setForm({ ...form, vendor: e.target.value })}
+          />
+          <Input
+            label="URL de adjunto (factura, Drive, etc.)"
+            placeholder="https://..."
+            value={form.attachment_url}
+            onChange={(e) => setForm({ ...form, attachment_url: e.target.value })}
           />
           <Textarea
             label="Notas"

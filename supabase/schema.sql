@@ -103,10 +103,20 @@ create table if not exists transactions (
   amount numeric(15,2) not null,
   date date not null,
   reference_number text,
+  vendor text,
+  attachment_url text,
   notes text,
   created_by uuid references profiles(id) not null,
   created_at timestamptz default now() not null,
   updated_at timestamptz default now() not null
+);
+
+create table if not exists transaction_comments (
+  id uuid default gen_random_uuid() primary key,
+  transaction_id uuid references transactions(id) on delete cascade not null,
+  user_id uuid references profiles(id) on delete cascade not null,
+  body text not null,
+  created_at timestamptz default now() not null
 );
 
 create table if not exists project_logs (
@@ -195,6 +205,7 @@ alter table budget_categories enable row level security;
 alter table budget_alerts enable row level security;
 alter table transaction_types enable row level security;
 alter table transactions enable row level security;
+alter table transaction_comments enable row level security;
 alter table project_logs enable row level security;
 alter table notifications enable row level security;
 
@@ -391,6 +402,41 @@ create policy "transactions_delete" on transactions
     )
   );
 
+-- TRANSACTION COMMENTS
+create policy "transaction_comments_select" on transaction_comments
+  for select to authenticated
+  using (
+    exists (
+      select 1 from transactions t
+      inner join project_members pm on pm.project_id = t.project_id and pm.user_id = auth.uid()
+      where t.id = transaction_comments.transaction_id
+    )
+  );
+
+create policy "transaction_comments_insert" on transaction_comments
+  for insert to authenticated
+  with check (
+    auth.uid() = user_id
+    and exists (
+      select 1 from transactions t
+      inner join project_members pm
+        on pm.project_id = t.project_id and pm.user_id = auth.uid() and pm.role in ('admin', 'worker')
+      where t.id = transaction_comments.transaction_id
+    )
+  );
+
+create policy "transaction_comments_delete" on transaction_comments
+  for delete to authenticated
+  using (
+    user_id = auth.uid()
+    or exists (
+      select 1 from transactions t
+      inner join project_members pm
+        on pm.project_id = t.project_id and pm.user_id = auth.uid() and pm.role = 'admin'
+      where t.id = transaction_comments.transaction_id
+    )
+  );
+
 -- PROJECT LOGS (solo lectura para miembros, inserción para usuarios autenticados)
 create policy "project_logs_select" on project_logs
   for select to authenticated
@@ -581,6 +627,7 @@ create index if not exists idx_project_members_user    on project_members(user_i
 create index if not exists idx_project_members_project on project_members(project_id);
 create index if not exists idx_transactions_project    on transactions(project_id);
 create index if not exists idx_transactions_category   on transactions(category_id);
+create index if not exists idx_transaction_comments_tx   on transaction_comments(transaction_id);
 create index if not exists idx_notifications_user      on notifications(user_id, is_read);
 create index if not exists idx_project_logs_project    on project_logs(project_id);
 create index if not exists idx_companions_user         on companions(user_id);

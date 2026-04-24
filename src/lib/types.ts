@@ -108,6 +108,8 @@ export interface Transaction {
   amount: number
   date: string
   reference_number: string | null
+  vendor: string | null
+  attachment_url: string | null
   notes: string | null
   created_by: string
   created_at: string
@@ -115,6 +117,15 @@ export interface Transaction {
   transaction_type?: TransactionType
   category?: BudgetCategory
   creator?: Profile
+}
+
+export interface TransactionComment {
+  id: string
+  transaction_id: string
+  user_id: string
+  body: string
+  created_at: string
+  author?: Profile
 }
 
 export interface ProjectLog {

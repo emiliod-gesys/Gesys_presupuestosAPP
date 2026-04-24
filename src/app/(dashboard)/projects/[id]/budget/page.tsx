@@ -3,6 +3,8 @@ import { redirect } from "next/navigation"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { formatCurrency, getBudgetStatus } from "@/lib/utils"
 import { ManageCategoriesButton } from "@/components/projects/manage-categories-button"
+import { BudgetAlignmentAlert } from "@/components/projects/budget-alignment-alert"
+import { BudgetExportActions } from "@/components/projects/budget-export-actions"
 import type { UserRole } from "@/lib/types"
 
 export default async function BudgetPage({ params }: { params: Promise<{ id: string }> }) {
@@ -38,6 +40,28 @@ export default async function BudgetPage({ params }: { params: Promise<{ id: str
 
   return (
     <div className="space-y-6">
+      <BudgetAlignmentAlert
+        projectId={id}
+        projectTotalBudget={Number(project.total_budget) || 0}
+        currency={project.currency}
+        categories={categories || []}
+        role={role}
+      />
+
+      <Card>
+        <CardContent className="pt-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-sm font-semibold text-gray-900">Informes</h2>
+              <p className="mt-0.5 text-xs text-gray-500">
+                Imprime o exporta el estado del presupuesto para compartir con el cliente o archivo interno.
+              </p>
+            </div>
+            <BudgetExportActions projectId={id} />
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Total budget card */}
       <Card>
         <CardContent className="pt-6">
