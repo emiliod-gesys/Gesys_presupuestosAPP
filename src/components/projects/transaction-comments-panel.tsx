@@ -16,6 +16,25 @@ interface Row {
   author?: { full_name?: string | null; email: string } | null
 }
 
+/** Supabase puede devolver `author` como objeto o como array según el join. */
+function normalizeCommentRows(
+  data: unknown
+): Row[] {
+  if (!Array.isArray(data)) return []
+  return data.map((item) => {
+    const r = item as {
+      id: string
+      user_id: string
+      body: string
+      created_at: string
+      author?: { full_name?: string | null; email: string } | { full_name?: string | null; email: string }[] | null
+    }
+    const a = r.author
+    const author = Array.isArray(a) ? (a[0] ?? null) : (a ?? null)
+    return { id: r.id, user_id: r.user_id, body: r.body, created_at: r.created_at, author }
+  })
+}
+
 export function TransactionCommentsPanel({
   transactionId,
   canAdd,
@@ -48,7 +67,7 @@ export function TransactionCommentsPanel({
       if (error.message.includes("does not exist") || error.code === "42P01") {
         setRows([])
       } else toast("error", error.message)
-    } else setRows((data as Row[]) || [])
+    } else setRows(normalizeCommentRows(data))
     setLoading(false)
   }, [transactionId, toast])
 
