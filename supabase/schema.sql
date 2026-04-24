@@ -663,7 +663,7 @@ create trigger on_auth_user_created
 -- ============================================================
 
 create or replace function log_transaction_change()
-returns trigger language plpgsql security definer as $$
+returns trigger language plpgsql security definer set search_path = public as $$
 begin
   if TG_OP = 'INSERT' then
     insert into project_logs (project_id, user_id, action, details)
@@ -681,12 +681,16 @@ begin
       'amount',         new.amount
     ));
   elsif TG_OP = 'DELETE' then
-    insert into project_logs (project_id, user_id, action, details)
-    values (old.project_id, old.created_by, 'transaction_deleted', jsonb_build_object(
-      'transaction_id', old.id,
-      'description',    old.description,
-      'amount',         old.amount
-    ));
+    -- Borrado en cascada del proyecto: el orden interno puede dejar `projects`
+    -- ya eliminado cuando corre este AFTER DELETE; el INSERT fallaría (23503).
+    if exists (select 1 from public.projects p where p.id = old.project_id) then
+      insert into project_logs (project_id, user_id, action, details)
+      values (old.project_id, old.created_by, 'transaction_deleted', jsonb_build_object(
+        'transaction_id', old.id,
+        'description',    old.description,
+        'amount',         old.amount
+      ));
+    end if;
   end if;
   return coalesce(new, old);
 end;

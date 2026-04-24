@@ -1,6 +1,7 @@
 import { cookies } from "next/headers"
 import { createServerClient } from "@supabase/ssr"
 import { NextResponse } from "next/server"
+import { createServiceRoleClient } from "@/lib/supabase/service-role"
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -109,6 +110,32 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
 
+  const { data: membership } = await supabase
+    .from("project_members")
+    .select("role")
+    .eq("project_id", id)
+    .eq("user_id", user.id)
+    .maybeSingle()
+
+  if (!membership || membership.role !== "admin") {
+    return NextResponse.json({ error: "Solo administradores pueden eliminar el proyecto" }, { status: 403 })
+  }
+
+  const service = createServiceRoleClient()
+  if (service) {
+    const { data: deleted, error } = await service.from("projects").delete().eq("id", id).select("id")
+    if (error) {
+      return NextResponse.json(
+        { error: error.message, code: error.code, hint: error.hint },
+        { status: 500 }
+      )
+    }
+    if (!deleted?.length) {
+      return NextResponse.json({ error: "Proyecto no encontrado" }, { status: 404 })
+    }
+    return NextResponse.json({ ok: true })
+  }
+
   const { error } = await supabase.rpc("delete_project_as_admin", { p_project_id: id })
   if (error) {
     const msg = error.message ?? ""
@@ -119,7 +146,15 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
       )
     }
     if (/Proyecto no encontrado/i.test(msg)) {
-      return NextResponse.json({ error: msg, code: error.code, hint: error.hint }, { status: 404 })
+      return NextResponse.json(
+        {
+          error: msg,
+          code: error.code,
+          hint:
+            "Añade SUPABASE_SERVICE_ROLE_KEY en el servidor (Vercel) o en Supabase ejecuta la RPC con dueño que omita RLS (ALTER FUNCTION … OWNER TO postgres).",
+        },
+        { status: 404 }
+      )
     }
     if (/No autorizado/i.test(msg)) {
       return NextResponse.json({ error: msg, code: error.code, hint: error.hint }, { status: 401 })

@@ -1,6 +1,10 @@
--- Borrado de proyecto vía RPC: evita que el CASCADE falle por tablas con RLS
--- sin política DELETE (p. ej. notifications, project_invitations) o por orden
--- de borrado frente a project_members.
+-- Borrado de proyecto vía RPC (respaldo si no usas SUPABASE_SERVICE_ROLE_KEY en la API).
+-- Recomendado en producción: variable SUPABASE_SERVICE_ROLE_KEY en Vercel; la ruta DELETE
+-- /api/projects/[id] borra con cliente service_role tras comprobar admin (sin depender de RLS).
+--
+-- Si al borrar aparece "Proyecto no encontrado", el DELETE dentro de esta función sigue
+-- sujeto a RLS: la función debe ser propiedad de un rol que omita RLS (p. ej. postgres) o
+-- comenta la línea ALTER OWNER si falla y usa solo la service role en la app.
 --
 -- Ejecutar en Supabase → SQL Editor (rol con permisos para crear funciones).
 
