@@ -81,10 +81,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(renglones), "Renglones")
 
   const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer
+  const body = new Uint8Array(buffer)
 
   const safeName = String(project.name).replace(/[^\w\s-]/g, "").slice(0, 40) || "proyecto"
 
-  return new NextResponse(buffer, {
+  return new NextResponse(body, {
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       "Content-Disposition": `attachment; filename="estado-presupuesto-${safeName}.xlsx"`,
