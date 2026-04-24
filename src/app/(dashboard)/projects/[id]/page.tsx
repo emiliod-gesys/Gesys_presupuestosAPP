@@ -7,6 +7,8 @@ import { formatCurrency, formatDate, getBudgetStatus } from "@/lib/utils"
 import { MapPin, Calendar, Users, Building2 } from "lucide-react"
 import { ProjectStatusActions } from "@/components/projects/project-status-actions"
 import { DuplicateProjectButton } from "@/components/projects/duplicate-project-button"
+import { EditProjectInfoButton } from "@/components/projects/edit-project-info-button"
+import { DeleteProjectButton } from "@/components/projects/delete-project-button"
 
 export default async function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -39,6 +41,13 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
 
   const { pct: totalPct, bg: totalBg } = getBudgetStatus(Math.max(0, totalSpent), project.total_budget)
 
+  const editInfoInitial = {
+    client: project.client ?? "",
+    location: project.location ?? "",
+    start_date: project.start_date ? String(project.start_date) : "",
+    end_date: project.end_date ? String(project.end_date) : "",
+  }
+
   return (
     <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
       {/* Main info */}
@@ -55,9 +64,11 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
                 )}
               </div>
               {membership.role === "admin" && (
-                <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+                <div className="flex w-full flex-col gap-2 sm:ml-auto sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+                  <EditProjectInfoButton projectId={id} initial={editInfoInitial} />
                   <DuplicateProjectButton projectId={id} />
                   <ProjectStatusActions projectId={id} currentStatus={project.status} />
+                  <DeleteProjectButton projectId={id} projectName={project.name} />
                 </div>
               )}
             </div>

@@ -37,7 +37,7 @@ create table if not exists projects (
   end_date date,
   status text check (status in ('active', 'completed', 'archived')) default 'active',
   is_template boolean default false,
-  template_id uuid references projects(id),
+  template_id uuid references projects(id) on delete set null,
   created_by uuid references profiles(id) not null,
   total_budget numeric(15,2) default 0,
   currency text default 'GTQ',
@@ -253,6 +253,10 @@ create policy "projects_insert" on projects
 
 create policy "projects_update" on projects
   for update to authenticated
+  using (public.current_user_is_project_admin(projects.id));
+
+create policy "projects_delete" on projects
+  for delete to authenticated
   using (public.current_user_is_project_admin(projects.id));
 
 -- PROJECT MEMBERS (políticas sin auto-referencia: evitan 42P17 / infinite recursion)
