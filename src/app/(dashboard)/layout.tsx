@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
-import { Sidebar } from "@/components/dashboard/sidebar"
+import { DashboardShell } from "@/components/dashboard/dashboard-shell"
 import type { Profile } from "@/lib/types"
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -21,11 +21,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
     .eq("is_read", false)
 
   return (
-    <div className="min-h-screen flex bg-gray-50">
-      <Sidebar profile={profile as Profile} unreadCount={unreadCount ?? 0} />
-      <main className="flex-1 ml-64 p-8 min-w-0">
-        {children}
-      </main>
-    </div>
+    <DashboardShell profile={profile as Profile} unreadCount={unreadCount ?? 0}>
+      {children}
+    </DashboardShell>
   )
 }

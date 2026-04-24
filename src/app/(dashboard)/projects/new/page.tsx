@@ -188,15 +188,15 @@ export default function NewProjectPage() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6 animate-in">
-      <div className="flex items-center gap-3">
-        <Link href="/dashboard">
+    <div className="mx-auto max-w-3xl space-y-5 animate-in sm:space-y-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-4">
+        <Link href="/dashboard" className="shrink-0 self-start">
           <Button variant="ghost" size="sm">
             <ArrowLeft className="h-4 w-4" /> Volver
           </Button>
         </Link>
-        <div>
-          <h1 className="text-xl font-bold text-gray-900">Nuevo proyecto</h1>
+        <div className="min-w-0">
+          <h1 className="text-lg font-bold text-gray-900 sm:text-xl">Nuevo proyecto</h1>
           <p className="text-sm text-gray-500">{"Define las caracter\u00edsticas y renglones del presupuesto"}</p>
         </div>
       </div>
@@ -239,7 +239,7 @@ export default function NewProjectPage() {
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
             />
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Input
                 label="Cliente"
                 placeholder="Nombre del cliente"
@@ -253,7 +253,7 @@ export default function NewProjectPage() {
                 onChange={(e) => setForm({ ...form, location: e.target.value })}
               />
             </div>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <Input
                 label="Fecha inicio"
                 type="date"
@@ -282,20 +282,20 @@ export default function NewProjectPage() {
         {/* Budget categories */}
         <Card className="mb-4">
           <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
                 <h2 className="text-sm font-semibold text-gray-900">Renglones del presupuesto</h2>
-                <p className="text-xs text-gray-500 mt-0.5">{"El presupuesto total se calcular\u00e1 autom\u00e1ticamente"}</p>
+                <p className="mt-0.5 text-xs text-gray-500">{"El presupuesto total se calcular\u00e1 autom\u00e1ticamente"}</p>
               </div>
-              <Button type="button" size="sm" variant="outline" onClick={addCategory}>
+              <Button type="button" size="sm" variant="outline" onClick={addCategory} className="w-full shrink-0 sm:w-auto">
                 <Plus className="h-3.5 w-3.5" /> {"Agregar rengl\u00f3n"}
               </Button>
             </div>
           </CardHeader>
           <CardContent className="space-y-3">
             {categories.map((cat, idx) => (
-              <div key={cat.id} className="flex gap-3 items-start p-3 bg-gray-50 rounded-lg">
-                <div className="flex-1 grid grid-cols-2 gap-3">
+              <div key={cat.id} className="flex flex-col gap-3 rounded-lg bg-gray-50 p-3 sm:flex-row sm:items-start">
+                <div className="grid min-w-0 flex-1 grid-cols-1 gap-3 sm:grid-cols-2">
                   <Input
                     placeholder={`Rengl\u00f3n ${idx + 1} *`}
                     value={cat.name}
@@ -320,7 +320,8 @@ export default function NewProjectPage() {
                   type="button"
                   onClick={() => removeCategory(cat.id)}
                   disabled={categories.length === 1}
-                  className="text-gray-300 hover:text-red-400 transition-colors mt-2 disabled:opacity-30"
+                  className="self-end text-gray-300 transition-colors hover:text-red-400 disabled:opacity-30 sm:mt-2 sm:self-start"
+                  aria-label="Eliminar rengl?n"
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>
@@ -328,9 +329,9 @@ export default function NewProjectPage() {
             ))}
           </CardContent>
           <CardFooter>
-            <div className="flex justify-between items-center w-full text-sm">
+            <div className="flex w-full flex-col gap-1 text-sm sm:flex-row sm:items-center sm:justify-between sm:gap-3">
               <span className="text-gray-500">Presupuesto total calculado:</span>
-              <span className="font-bold text-gray-900">
+              <span className="font-bold text-gray-900 sm:text-right">
                 {new Intl.NumberFormat("es-GT", { style: "currency", currency: form.currency }).format(
                   categories.reduce((s, c) => s + (parseFloat(c.budget_amount) || 0), 0)
                 )}
@@ -339,11 +340,17 @@ export default function NewProjectPage() {
           </CardFooter>
         </Card>
 
-        <div className="flex gap-3 justify-end">
-          <Button type="button" variant="outline" onClick={(e) => handleSubmit(e, true)} loading={loading}>
+        <div className="flex flex-col-reverse gap-3 sm:flex-row sm:flex-wrap sm:justify-end">
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full sm:w-auto"
+            onClick={(e) => handleSubmit(e, true)}
+            loading={loading}
+          >
             Crear y guardar como plantilla
           </Button>
-          <Button type="submit" loading={loading}>
+          <Button type="submit" className="w-full sm:w-auto" loading={loading}>
             Crear proyecto
           </Button>
         </div>

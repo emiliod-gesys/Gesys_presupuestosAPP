@@ -41,15 +41,19 @@ export default async function BudgetPage({ params }: { params: Promise<{ id: str
       {/* Total budget card */}
       <Card>
         <CardContent className="pt-6">
-          <div className="flex items-center justify-between mb-4">
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="text-sm font-semibold text-gray-900">Presupuesto total del proyecto</h2>
-            {role === "admin" && <ManageCategoriesButton projectId={id} categories={categories || []} />}
+            {role === "admin" && (
+              <div className="w-full sm:w-auto">
+                <ManageCategoriesButton projectId={id} categories={categories || []} />
+              </div>
+            )}
           </div>
-          <div className="flex justify-between items-baseline mb-3">
-            <span className="text-3xl font-bold text-gray-900">
+          <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
+            <span className="text-2xl font-bold text-gray-900 sm:text-3xl">
               {formatCurrency(project.total_budget, project.currency)}
             </span>
-            <span className={`text-lg font-semibold ${totalColor}`}>
+            <span className={`text-base font-semibold sm:text-lg ${totalColor}`}>
               {Math.min(totalPct, 100).toFixed(1)}% ejecutado
             </span>
           </div>

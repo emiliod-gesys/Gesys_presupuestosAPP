@@ -44,17 +44,19 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
       <div className="xl:col-span-2 space-y-4">
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                 <StatusBadge status={project.status} />
                 {project.is_template && (
-                  <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-medium">
+                  <span className="rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-700">
                     Plantilla
                   </span>
                 )}
               </div>
               {membership.role === "admin" && (
-                <ProjectStatusActions projectId={id} currentStatus={project.status} />
+                <div className="w-full sm:w-auto">
+                  <ProjectStatusActions projectId={id} currentStatus={project.status} />
+                </div>
               )}
             </div>
           </CardHeader>

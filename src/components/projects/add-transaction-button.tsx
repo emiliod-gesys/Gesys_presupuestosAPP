@@ -10,14 +10,16 @@ import { Modal } from "@/components/ui/modal"
 import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/components/ui/toast"
 import { Plus } from "lucide-react"
+import { cn } from "@/lib/utils"
 
 interface Props {
   projectId: string
   categories: { value: string; label: string }[]
   txTypes: { value: string; label: string; type: string }[]
+  className?: string
 }
 
-export function AddTransactionButton({ projectId, categories, txTypes }: Props) {
+export function AddTransactionButton({ projectId, categories, txTypes, className }: Props) {
   const router = useRouter()
   const { toast } = useToast()
   const [open, setOpen] = useState(false)
@@ -72,13 +74,13 @@ export function AddTransactionButton({ projectId, categories, txTypes }: Props) 
 
   return (
     <>
-      <Button size="sm" onClick={() => setOpen(true)}>
+      <Button size="sm" className={cn("w-full sm:w-auto", className)} onClick={() => setOpen(true)}>
         <Plus className="h-3.5 w-3.5" /> Nueva transacción
       </Button>
 
       <Modal open={open} onClose={() => setOpen(false)} title="Registrar transacción" size="lg">
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+        <form onSubmit={handleSubmit} className="space-y-4 p-4 sm:p-6">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Select
               label="Tipo de transacción *"
               options={txTypes}
@@ -102,7 +104,7 @@ export function AddTransactionButton({ projectId, categories, txTypes }: Props) 
             onChange={(e) => setForm({ ...form, description: e.target.value })}
             required
           />
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Input
               label="Monto *"
               type="number"
@@ -133,9 +135,13 @@ export function AddTransactionButton({ projectId, categories, txTypes }: Props) 
             value={form.notes}
             onChange={(e) => setForm({ ...form, notes: e.target.value })}
           />
-          <div className="flex justify-end gap-3 pt-2">
-            <Button type="button" variant="ghost" onClick={() => setOpen(false)}>Cancelar</Button>
-            <Button type="submit" loading={loading}>Registrar</Button>
+          <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end sm:gap-3">
+            <Button type="button" variant="ghost" className="w-full sm:w-auto" onClick={() => setOpen(false)}>
+              Cancelar
+            </Button>
+            <Button type="submit" className="w-full sm:w-auto" loading={loading}>
+              Registrar
+            </Button>
           </div>
         </form>
       </Modal>

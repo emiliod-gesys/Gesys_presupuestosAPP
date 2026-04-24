@@ -72,7 +72,7 @@ export function AddCompanionButton() {
 
   return (
     <>
-      <Button onClick={() => setOpen(true)}>
+      <Button className="w-full sm:w-auto" onClick={() => setOpen(true)}>
         <UserPlus className="h-4 w-4" /> Agregar compañero
       </Button>
 

@@ -45,11 +45,11 @@ export function ProjectStatusActions({ projectId, currentStatus }: Props) {
 
   return (
     <div className="relative">
-      <Button variant="outline" size="sm" onClick={() => setOpen(!open)} loading={loading}>
+      <Button variant="outline" size="sm" className="w-full sm:w-auto" onClick={() => setOpen(!open)} loading={loading}>
         Cambiar estado <ChevronDown className="h-3.5 w-3.5" />
       </Button>
       {open && (
-        <div className="absolute right-0 top-9 bg-white border border-gray-200 rounded-xl shadow-lg z-10 py-1 min-w-[200px]">
+        <div className="absolute left-0 top-9 z-10 min-w-[200px] rounded-xl border border-gray-200 bg-white py-1 shadow-lg sm:left-auto sm:right-0">
           {options.map(({ status, label, icon: Icon }) => (
             <button
               key={status}

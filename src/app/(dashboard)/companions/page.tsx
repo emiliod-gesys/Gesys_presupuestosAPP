@@ -28,13 +28,15 @@ export default async function CompanionsPage() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6 animate-in">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Compañeros</h1>
-          <p className="text-gray-500 text-sm mt-0.5">Conecta con otros usuarios para colaborar en proyectos</p>
+    <div className="mx-auto max-w-3xl space-y-6 animate-in">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">Compañeros</h1>
+          <p className="mt-0.5 text-sm text-gray-500">Conecta con otros usuarios para colaborar en proyectos</p>
         </div>
-        <AddCompanionButton />
+        <div className="w-full shrink-0 sm:w-auto">
+          <AddCompanionButton />
+        </div>
       </div>
 
       {/* Pending received */}

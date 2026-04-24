@@ -1,5 +1,6 @@
 "use client"
 
+import type { ReactNode } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
@@ -17,6 +18,12 @@ import type { Profile } from "@/lib/types"
 interface SidebarProps {
   profile: Profile
   unreadCount?: number
+  /** Clases extra en el aside (p. ej. translate en móvil). */
+  className?: string
+  /** Tras navegar en móvil, cerrar drawer. */
+  onNavClick?: () => void
+  /** Botón cerrar u otro control en la cabecera (solo móvil). */
+  headerAddon?: ReactNode
 }
 
 const nav = [
@@ -24,11 +31,18 @@ const nav = [
   { href: "/companions", label: "Compañeros", icon: Users },
 ]
 
-export function Sidebar({ profile, unreadCount = 0 }: SidebarProps) {
+export function Sidebar({
+  profile,
+  unreadCount = 0,
+  className,
+  onNavClick,
+  headerAddon,
+}: SidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
 
   const handleLogout = async () => {
+    onNavClick?.()
     const supabase = createClient()
     await supabase.auth.signOut()
     router.push("/login")
@@ -36,16 +50,22 @@ export function Sidebar({ profile, unreadCount = 0 }: SidebarProps) {
   }
 
   return (
-    <aside className="fixed inset-y-0 left-0 w-64 bg-white border-r border-gray-200 flex flex-col z-30">
+    <aside
+      className={cn(
+        "fixed inset-y-0 left-0 z-[56] flex w-[min(100vw-3rem,16rem)] max-w-xs flex-col border-r border-gray-200 bg-white transition-transform duration-200 ease-out md:z-30 md:w-64",
+        className
+      )}
+    >
       {/* Logo */}
-      <div className="flex items-center gap-3 px-6 py-5 border-b border-gray-100">
-        <div className="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center shadow-sm flex-shrink-0">
-          <FolderKanban className="w-5 h-5 text-white" />
+      <div className="flex items-center gap-3 border-b border-gray-100 px-4 py-4 md:px-6 md:py-5">
+        <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-indigo-600 shadow-sm">
+          <FolderKanban className="h-5 w-5 text-white" />
         </div>
-        <div>
-          <p className="font-bold text-gray-900 text-sm leading-tight">Gesys</p>
-          <p className="text-xs text-gray-500 leading-tight">Presupuestos</p>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-bold leading-tight text-gray-900">Gesys</p>
+          <p className="text-xs leading-tight text-gray-500">Presupuestos</p>
         </div>
+        {headerAddon}
       </div>
 
       {/* Nav */}
@@ -56,6 +76,7 @@ export function Sidebar({ profile, unreadCount = 0 }: SidebarProps) {
             <Link
               key={href}
               href={href}
+              onClick={() => onNavClick?.()}
               className={cn(
                 "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
                 active
@@ -79,6 +100,7 @@ export function Sidebar({ profile, unreadCount = 0 }: SidebarProps) {
       <div className="border-t border-gray-100 p-3">
         <Link
           href="/profile"
+          onClick={() => onNavClick?.()}
           className={cn(
             "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors",
             pathname === "/profile" ? "bg-gray-100" : "hover:bg-gray-50"

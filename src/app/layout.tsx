@@ -10,6 +10,13 @@ export const metadata: Metadata = {
   description: "Sistema de gestión de presupuestos de proyectos",
 }
 
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  viewportFit: "cover",
+}
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="es" className={`${inter.variable} h-full antialiased`}>

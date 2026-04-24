@@ -39,7 +39,7 @@ export default async function TransactionsPage({ params }: { params: Promise<{ i
   return (
     <div className="space-y-6">
       {/* Summary */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
         <Card>
           <CardContent className="pt-5">
             <p className="text-xs text-gray-500 mb-1">Total ingresos</p>
@@ -64,12 +64,13 @@ export default async function TransactionsPage({ params }: { params: Promise<{ i
 
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="text-sm font-semibold text-gray-900">
               Transacciones ({transactions?.length || 0})
             </h2>
             {canEdit && (
               <AddTransactionButton
+                className="shrink-0"
                 projectId={id}
                 categories={(categories || []).map((c) => ({ value: c.id, label: c.name }))}
                 txTypes={(txTypes || []).map((t) => ({ value: t.id, label: t.name, type: t.type }))}
@@ -89,35 +90,45 @@ export default async function TransactionsPage({ params }: { params: Promise<{ i
                 const txType = tx.transaction_type as { type: string; name: string } | null
                 const creator = tx.creator as { full_name?: string; email: string; avatar_url?: string } | null
                 return (
-                  <div key={tx.id} className="flex items-center gap-4 px-6 py-3 hover:bg-gray-50 transition-colors">
-                    <div className={`w-2 h-2 rounded-full flex-shrink-0 ${txType?.type === "income" ? "bg-green-500" : "bg-red-500"}`} />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-medium text-gray-900 truncate">{tx.description}</p>
-                        <Badge variant={txType?.type === "income" ? "success" : "danger"}>
-                          {txType?.name}
-                        </Badge>
-                      </div>
-                      <div className="flex items-center gap-3 mt-0.5 text-xs text-gray-500">
-                        <span>{formatDate(tx.date)}</span>
-                        {(tx.category as { name?: string } | null)?.name && (
-                          <span className="bg-gray-100 px-1.5 py-0.5 rounded">
-                            {(tx.category as { name: string }).name}
-                          </span>
-                        )}
-                        {tx.reference_number && <span>Ref: {tx.reference_number}</span>}
+                  <div
+                    key={tx.id}
+                    className="flex flex-col gap-3 px-4 py-3 transition-colors hover:bg-gray-50 sm:flex-row sm:items-center sm:gap-4 sm:px-6"
+                  >
+                    <div className="flex items-start gap-3 sm:contents">
+                      <div
+                        className={`mt-1.5 h-2 w-2 shrink-0 rounded-full sm:mt-0 ${txType?.type === "income" ? "bg-green-500" : "bg-red-500"}`}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-sm font-medium text-gray-900">{tx.description}</p>
+                          <Badge variant={txType?.type === "income" ? "success" : "danger"}>
+                            {txType?.name}
+                          </Badge>
+                        </div>
+                        <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
+                          <span>{formatDate(tx.date)}</span>
+                          {(tx.category as { name?: string } | null)?.name && (
+                            <span className="rounded bg-gray-100 px-1.5 py-0.5">
+                              {(tx.category as { name: string }).name}
+                            </span>
+                          )}
+                          {tx.reference_number && <span>Ref: {tx.reference_number}</span>}
+                        </div>
                       </div>
                     </div>
-                    <div className="text-right flex-shrink-0">
-                      <p className={`font-bold text-sm ${txType?.type === "income" ? "text-green-700" : "text-red-700"}`}>
-                        {txType?.type === "income" ? "+" : "-"}{formatCurrency(tx.amount)}
+                    <div className="flex items-center justify-between gap-3 border-t border-gray-100 pt-2 sm:flex-1 sm:justify-end sm:border-t-0 sm:pt-0">
+                      <p
+                        className={`text-sm font-bold sm:text-right ${txType?.type === "income" ? "text-green-700" : "text-red-700"}`}
+                      >
+                        {txType?.type === "income" ? "+" : "-"}
+                        {formatCurrency(tx.amount)}
                       </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Avatar src={creator?.avatar_url} name={creator?.full_name || creator?.email} size="xs" />
-                      {(role === "admin" || tx.created_by === user.id) && (
-                        <DeleteTransactionButton transactionId={tx.id} />
-                      )}
+                      <div className="flex shrink-0 items-center gap-2">
+                        <Avatar src={creator?.avatar_url} name={creator?.full_name || creator?.email} size="xs" />
+                        {(role === "admin" || tx.created_by === user.id) && (
+                          <DeleteTransactionButton transactionId={tx.id} />
+                        )}
+                      </div>
                     </div>
                   </div>
                 )
