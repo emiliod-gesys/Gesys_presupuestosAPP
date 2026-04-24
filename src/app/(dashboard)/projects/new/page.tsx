@@ -46,7 +46,7 @@ function parseCsvLine(line: string): string[] {
   return result.map((s) => s.replace(/^"|"$/g, "").trim())
 }
 
-/** Columnas: nombre, monto [, descripci?n]. Primera fila puede ser cabecera (nombre/name, monto/budget_amount). */
+/** Columnas: nombre, monto [, descripci\u00f3n]. Primera fila puede ser cabecera (nombre/name, monto/budget_amount). */
 function parseBudgetCategoryCsv(text: string): { name: string; budget_amount: string; description: string }[] {
   const lines = text.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.length > 0)
   if (!lines.length) return []
@@ -177,7 +177,7 @@ export default function NewProjectPage() {
       if (!parsed.length) {
         toast(
           "error",
-          "No se encontraron filas v?lidas. Use CSV con columnas: nombre, monto, descripci?n (opcional)."
+          "No se encontraron filas v\u00e1lidas. Use CSV con columnas: nombre, monto, descripci\u00f3n (opcional)."
         )
         return
       }
@@ -193,7 +193,7 @@ export default function NewProjectPage() {
           })),
         },
       ])
-      toast("success", `Importados ${parsed.length} renglones en una categor?a (puedes nombrarla arriba)`)
+      toast("success", `Importados ${parsed.length} renglones en una categor\u00eda (puedes nombrarla arriba)`)
     }
     reader.onerror = () => toast("error", "No se pudo leer el archivo")
     reader.readAsText(file, "UTF-8")
@@ -290,7 +290,7 @@ export default function NewProjectPage() {
           .select("id")
           .single()
         if (pErr || !parentRow) {
-          toast("error", formatSupabaseError(pErr, "Error al crear la categor?a de presupuesto"))
+          toast("error", formatSupabaseError(pErr, "Error al crear la categor\u00eda de presupuesto"))
           setLoading(false)
           return
         }
@@ -306,7 +306,7 @@ export default function NewProjectPage() {
             order_index: orderIndex,
           })
           if (cErr) {
-            toast("error", formatSupabaseError(cErr, "Error al crear un rengl?n"))
+            toast("error", formatSupabaseError(cErr, "Error al crear un rengl\u00f3n"))
             setLoading(false)
             return
           }
@@ -323,7 +323,7 @@ export default function NewProjectPage() {
             order_index: orderIndex,
           })
           if (cErr) {
-            toast("error", formatSupabaseError(cErr, "Error al crear un rengl?n"))
+            toast("error", formatSupabaseError(cErr, "Error al crear un rengl\u00f3n"))
             setLoading(false)
             return
           }
@@ -441,14 +441,18 @@ export default function NewProjectPage() {
           <CardHeader>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0">
-                <h2 className="text-sm font-semibold text-gray-900">Categor?as y renglones del presupuesto</h2>
+                <h2 className="text-sm font-semibold text-gray-900">
+                  {"Categor\u00edas y renglones del presupuesto"}
+                </h2>
                 <p className="mt-0.5 text-xs text-gray-500">
-                  Crea una categor?a (ej. <span className="font-medium">Materiales</span>) y a?ade renglones debajo (ej. Piedra, Agua). Si
-                  dejas el nombre de categor?a vac?o, los renglones quedan al primer nivel como antes.
+                  {"Crea una categor\u00eda (ej. "}
+                  <span className="font-medium">Materiales</span>
+                  {") y a\u00f1ade renglones debajo (ej. Piedra, Agua). Si dejas el nombre de categor\u00eda vac\u00edo, los renglones quedan al primer nivel como antes."}
                 </p>
                 <p className="mt-1 text-xs text-gray-400">
-                  CSV: <span className="font-mono">nombre,monto,descripcion</span> (cabecera opcional); se cargan en un bloque. Puedes
-                  nombrar la categor?a despu?s.
+                  {"CSV: "}
+                  <span className="font-mono">nombre,monto,descripcion</span>
+                  {" (cabecera opcional); se cargan en un bloque. Puedes nombrar la categor\u00eda despu\u00e9s."}
                 </p>
               </div>
               <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row">
@@ -470,7 +474,7 @@ export default function NewProjectPage() {
                   Importar CSV
                 </Button>
                 <Button type="button" size="sm" variant="outline" onClick={addGroup} className="w-full sm:w-auto">
-                  <FolderPlus className="h-3.5 w-3.5" /> Nueva categor?a
+                  <FolderPlus className="h-3.5 w-3.5" /> {"Nueva categor\u00eda"}
                 </Button>
               </div>
             </div>
@@ -481,13 +485,13 @@ export default function NewProjectPage() {
                 <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0 flex-1 space-y-2">
                     <Input
-                      label="Nombre de la categor?a (opcional)"
-                      placeholder="Ej. Materiales, Mano de obra?"
+                      label={"Nombre de la categor\u00eda (opcional)"}
+                      placeholder={"Ej. Materiales, Mano de obra\u2026"}
                       value={group.name}
                       onChange={(e) => updateGroup(group.id, "name", e.target.value)}
                     />
                     <Input
-                      placeholder="Nota o descripci?n de la categor?a (opcional)"
+                      placeholder={"Nota o descripci\u00f3n de la categor\u00eda (opcional)"}
                       value={group.description}
                       onChange={(e) => updateGroup(group.id, "description", e.target.value)}
                     />
@@ -497,7 +501,7 @@ export default function NewProjectPage() {
                     onClick={() => removeGroup(group.id)}
                     disabled={groups.length === 1}
                     className="self-end shrink-0 text-gray-300 transition-colors hover:text-red-400 disabled:opacity-30 sm:self-start"
-                    aria-label="Eliminar categor?a"
+                    aria-label={"Eliminar categor\u00eda"}
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
@@ -508,7 +512,7 @@ export default function NewProjectPage() {
                     <div key={line.id} className="flex flex-col gap-3 rounded-lg border border-gray-100 bg-white p-3 sm:flex-row sm:items-start">
                       <div className="grid min-w-0 flex-1 grid-cols-1 gap-3 sm:grid-cols-2">
                         <Input
-                          placeholder={`Rengl?n ${lineIdx + 1} *`}
+                          placeholder={`Rengl\u00f3n ${lineIdx + 1} *`}
                           value={line.name}
                           onChange={(e) => updateLine(group.id, line.id, "name", e.target.value)}
                         />
@@ -531,7 +535,7 @@ export default function NewProjectPage() {
                         type="button"
                         onClick={() => removeLine(group.id, line.id)}
                         className="self-end text-gray-300 transition-colors hover:text-red-400 sm:mt-2 sm:self-start"
-                        aria-label="Eliminar rengl?n"
+                        aria-label={"Eliminar rengl\u00f3n"}
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>
@@ -545,7 +549,7 @@ export default function NewProjectPage() {
                   className="mt-3 w-full sm:w-auto"
                   onClick={() => addLineToGroup(group.id)}
                 >
-                  <Plus className="h-3.5 w-3.5" /> Agregar rengl?n
+                  <Plus className="h-3.5 w-3.5" /> {"Agregar rengl\u00f3n"}
                 </Button>
               </div>
             ))}
