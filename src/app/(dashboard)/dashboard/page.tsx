@@ -80,7 +80,7 @@ export default async function DashboardPage() {
         let atRiskCount = 0
         const currencies = new Set<string>()
         for (const m of memberships) {
-          const p = m.project as { id: string; total_budget: number; currency: string }
+          const p = m.project as unknown as { id: string; total_budget: number; currency: string }
           const b = Number(p.total_budget) || 0
           totalBudgetSum += b
           const spent = Math.max(0, spentByProject[p.id] || 0)
