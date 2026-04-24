@@ -13,6 +13,15 @@ export interface Profile {
   updated_at: string
 }
 
+/** Credenciales Odoo (tabla `user_odoo_settings`, RLS solo propietario). */
+export interface UserOdooSettings {
+  user_id: string
+  odoo_url: string | null
+  odoo_login: string | null
+  odoo_password: string | null
+  updated_at: string
+}
+
 export interface Companion {
   id: string
   user_id: string

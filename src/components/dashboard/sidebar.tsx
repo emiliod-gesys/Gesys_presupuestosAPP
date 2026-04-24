@@ -8,7 +8,6 @@ import { createClient } from "@/lib/supabase/client"
 import { Avatar } from "@/components/ui/avatar"
 import {
   LayoutDashboard,
-  FolderKanban,
   Users,
   LogOut,
   ChevronRight,
@@ -58,12 +57,19 @@ export function Sidebar({
     >
       {/* Logo */}
       <div className="flex items-center gap-3 border-b border-gray-100 px-4 py-4 md:px-6 md:py-5">
-        <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-indigo-600 shadow-sm">
-          <FolderKanban className="h-5 w-5 text-white" />
+        <div className="flex h-9 flex-shrink-0 items-center rounded-lg bg-neutral-950 px-2 shadow-sm ring-1 ring-neutral-800">
+          <img
+            src="/branding/gesys-logo.svg"
+            alt="GESYS"
+            width={112}
+            height={28}
+            className="h-6 w-auto max-w-[7.5rem] object-contain object-left"
+            decoding="async"
+          />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-bold leading-tight text-gray-900">Gesys</p>
-          <p className="text-xs leading-tight text-gray-500">Presupuestos</p>
+          <p className="text-sm font-semibold leading-tight text-gray-900 truncate">Presupuestos</p>
+          <p className="text-xs leading-tight text-gray-500 truncate">Gesys</p>
         </div>
         {headerAddon}
       </div>

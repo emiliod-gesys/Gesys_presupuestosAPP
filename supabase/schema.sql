@@ -18,6 +18,14 @@ create table if not exists profiles (
   updated_at timestamptz default now() not null
 );
 
+create table if not exists user_odoo_settings (
+  user_id uuid references profiles(id) on delete cascade primary key,
+  odoo_url text,
+  odoo_login text,
+  odoo_password text,
+  updated_at timestamptz default now() not null
+);
+
 create table if not exists companions (
   id uuid default gen_random_uuid() primary key,
   user_id uuid references profiles(id) on delete cascade not null,
@@ -197,6 +205,7 @@ grant execute on function public.project_has_no_members(uuid) to authenticated;
 -- ============================================================
 
 alter table profiles enable row level security;
+alter table user_odoo_settings enable row level security;
 alter table companions enable row level security;
 alter table projects enable row level security;
 alter table project_members enable row level security;
@@ -225,6 +234,19 @@ drop policy if exists "profiles_insert_own" on profiles;
 create policy "profiles_insert_own" on profiles
   for insert to authenticated
   with check (auth.uid() = id);
+
+-- USER ODOO SETTINGS (solo el propio usuario)
+create policy "user_odoo_settings_select_own" on user_odoo_settings
+  for select to authenticated using (auth.uid() = user_id);
+
+create policy "user_odoo_settings_insert_own" on user_odoo_settings
+  for insert to authenticated with check (auth.uid() = user_id);
+
+create policy "user_odoo_settings_update_own" on user_odoo_settings
+  for update to authenticated using (auth.uid() = user_id);
+
+create policy "user_odoo_settings_delete_own" on user_odoo_settings
+  for delete to authenticated using (auth.uid() = user_id);
 
 -- COMPANIONS
 create policy "companions_select" on companions

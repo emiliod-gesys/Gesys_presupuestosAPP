@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 88 28" role="img" aria-label="Odoo">
+  <circle cx="12" cy="14" r="10" fill="#714B67"/>
+  <circle cx="14" cy="12" r="3" fill="#fff"/>
+  <text x="26" y="19" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="16" font-weight="700" fill="#714B67">odoo</text>
+</svg>

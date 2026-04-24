@@ -36,10 +36,18 @@ export function DashboardShell({ profile, unreadCount, children }: DashboardShel
           <Menu className="h-5 w-5" />
         </button>
         <div className="flex min-w-0 flex-1 items-center gap-2">
-          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-indigo-600 shadow-sm">
-            <span className="text-xs font-bold text-white">G</span>
+          <div className="flex h-8 flex-shrink-0 items-center rounded-md bg-neutral-950 px-1 ring-1 ring-neutral-800">
+            {/* SVG versionado en git; si subes gesys-logo.png puedes cambiar el src */}
+            <img
+              src="/branding/gesys-logo.svg"
+              alt="GESYS"
+              width={100}
+              height={24}
+              className="h-5 w-auto max-w-[5.75rem] object-contain object-left"
+              decoding="async"
+            />
           </div>
-          <span className="truncate text-sm font-semibold text-gray-900">Gesys Presupuestos</span>
+          <span className="truncate text-sm font-semibold text-gray-900">Presupuestos</span>
         </div>
       </header>
 

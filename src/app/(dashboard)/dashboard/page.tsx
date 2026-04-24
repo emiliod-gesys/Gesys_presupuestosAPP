@@ -16,19 +16,32 @@ export default async function DashboardPage() {
   if (!user) redirect("/login")
 
   // Projects where user is a member
-  const { data: memberships } = await supabase
+  const { data: rawMemberships } = await supabase
     .from("project_members")
     .select("role, project:projects(*)")
     .eq("user_id", user.id)
     .order("joined_at", { ascending: false })
 
+  /** Sin fila de proyecto (p. ej. RLS) rompería el render al acceder a project.id */
+  const memberships = (rawMemberships ?? []).filter(
+    (m) => m.project != null && typeof m.project === "object" && "id" in m.project
+  )
+
   // Pending project invitations
-  const { data: invitations } = await supabase
+  const { data: rawInvitations } = await supabase
     .from("project_invitations")
     .select("*, project:projects(name, client), inviter:profiles!inviter_id(full_name, email, avatar_url)")
     .eq("invitee_id", user.id)
     .eq("status", "pending")
     .order("created_at", { ascending: false })
+
+  const invitations = (rawInvitations ?? []).filter(
+    (inv) =>
+      inv.project != null &&
+      typeof inv.project === "object" &&
+      "name" in inv.project &&
+      inv.inviter != null
+  )
 
   // Unread notifications
   const { data: notifications } = await supabase
