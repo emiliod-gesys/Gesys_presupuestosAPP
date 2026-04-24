@@ -21,6 +21,10 @@ export function InvitationActions({ invitationId, projectId }: Props) {
   const respond = async (action: "accept" | "reject") => {
     setLoading(action)
     const supabase = createClient()
+    const {
+      data: { user: currentUser },
+    } = await supabase.auth.getUser()
+
     const { data: inv } = await supabase
       .from("project_invitations")
       .select("*")
@@ -39,17 +43,16 @@ export function InvitationActions({ invitationId, projectId }: Props) {
       .eq("id", invitationId)
 
     if (action === "accept") {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
+      if (currentUser) {
         await supabase.from("project_members").insert({
           project_id: inv.project_id,
-          user_id: user.id,
+          user_id: currentUser.id,
           role: inv.role,
           invited_by: inv.inviter_id,
         })
         await supabase.from("project_logs").insert({
           project_id: inv.project_id,
-          user_id: user.id,
+          user_id: currentUser.id,
           action: "member_joined",
           details: { role: inv.role },
         })
@@ -57,6 +60,15 @@ export function InvitationActions({ invitationId, projectId }: Props) {
       toast("success", "Te has unido al proyecto")
     } else {
       toast("success", "Invitación rechazada")
+    }
+
+    if (currentUser) {
+      await supabase
+        .from("notifications")
+        .update({ is_read: true })
+        .eq("user_id", currentUser.id)
+        .eq("project_id", inv.project_id)
+        .eq("type", "project_invitation")
     }
 
     setDone(true)

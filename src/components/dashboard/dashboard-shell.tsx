@@ -36,18 +36,23 @@ export function DashboardShell({ profile, unreadCount, children }: DashboardShel
           <Menu className="h-5 w-5" />
         </button>
         <div className="flex min-w-0 flex-1 items-center gap-2">
-          <div className="flex h-8 flex-shrink-0 items-center rounded-md bg-neutral-950 px-1 ring-1 ring-neutral-800">
-            {/* SVG versionado en git; si subes gesys-logo.png puedes cambiar el src */}
+          <div className="flex h-8 flex-shrink-0 items-center rounded-md bg-white px-1 ring-1 ring-gray-200">
             <img
-              src="/branding/gesys-logo.svg"
+              src="/branding/gesys-logo.png"
               alt="GESYS"
               width={100}
-              height={24}
-              className="h-5 w-auto max-w-[5.75rem] object-contain object-left"
+              height={28}
+              className="h-6 w-auto max-w-[4.75rem] object-contain object-left sm:max-w-[5.5rem]"
               decoding="async"
+              onError={(e) => {
+                const el = e.currentTarget
+                if (!el.src.endsWith("gesys-logo.svg")) el.src = "/branding/gesys-logo.svg"
+              }}
             />
           </div>
-          <span className="truncate text-sm font-semibold text-gray-900">Presupuestos</span>
+          <span className="min-w-0 text-sm font-semibold leading-tight text-gray-900 break-words">
+            Presupuestos
+          </span>
         </div>
       </header>
 
@@ -81,7 +86,7 @@ export function DashboardShell({ profile, unreadCount, children }: DashboardShel
         }
       />
 
-      <main className="min-h-screen w-full min-w-0 flex-1 px-4 pb-8 pt-[4.5rem] md:ml-64 md:p-8 md:pt-8">
+      <main className="min-h-screen w-full min-w-0 flex-1 px-4 pb-8 pt-[4.5rem] md:ml-80 md:p-8 md:pt-8">
         {children}
       </main>
     </div>

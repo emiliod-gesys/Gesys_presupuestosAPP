@@ -57,12 +57,24 @@ export function InviteMemberButton({ projectId }: { projectId: string }) {
       return
     }
 
-    const { error } = await supabase.from("project_invitations").insert({
-      project_id: projectId,
-      inviter_id: user.id,
-      invitee_id: found.id,
-      role,
-    })
+    const { data: projectRow } = await supabase
+      .from("projects")
+      .select("name")
+      .eq("id", projectId)
+      .single()
+
+    const projectName = projectRow?.name?.trim() || "Proyecto"
+
+    const { data: invitation, error } = await supabase
+      .from("project_invitations")
+      .insert({
+        project_id: projectId,
+        inviter_id: user.id,
+        invitee_id: found.id,
+        role,
+      })
+      .select("id")
+      .single()
 
     if (error) {
       if (error.code === "23505") {
@@ -71,13 +83,20 @@ export function InviteMemberButton({ projectId }: { projectId: string }) {
         toast("error", "Error al enviar la invitación")
       }
     } else {
-      // Create notification for invitee
+      const roleLabel =
+        role === "admin" ? "Administrador" : role === "worker" ? "Trabajador" : "Observador"
+      // Create notification for invitee (data para UI: nombre + id de invitación)
       await supabase.from("notifications").insert({
         user_id: found.id,
         project_id: projectId,
         type: "project_invitation",
         title: "Nueva invitación a proyecto",
-        message: `Has sido invitado a participar en un proyecto como ${role === "admin" ? "Administrador" : role === "worker" ? "Trabajador" : "Observador"}.`,
+        message: `Te invitaron al proyecto «${projectName}» como ${roleLabel}.`,
+        data: {
+          invitation_id: invitation?.id,
+          project_name: projectName,
+          role,
+        },
       })
 
       await supabase.from("project_logs").insert({

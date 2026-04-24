@@ -51,25 +51,29 @@ export function Sidebar({
   return (
     <aside
       className={cn(
-        "fixed inset-y-0 left-0 z-[56] flex w-[min(100vw-3rem,16rem)] max-w-xs flex-col border-r border-gray-200 bg-white transition-transform duration-200 ease-out md:z-30 md:w-64",
+        "fixed inset-y-0 left-0 z-[56] flex w-[min(100vw-2rem,20rem)] max-w-none flex-col border-r border-gray-200 bg-white transition-transform duration-200 ease-out md:z-30 md:w-80",
         className
       )}
     >
-      {/* Logo */}
-      <div className="flex items-center gap-3 border-b border-gray-100 px-4 py-4 md:px-6 md:py-5">
-        <div className="flex h-9 flex-shrink-0 items-center rounded-lg bg-neutral-950 px-2 shadow-sm ring-1 ring-neutral-800">
+      {/* Logo: PNG pensado para fondo claro; fallback SVG sin bloque negro */}
+      <div className="flex items-center gap-2.5 border-b border-gray-100 px-4 py-4 md:gap-3 md:px-6 md:py-5">
+        <div className="flex h-9 flex-shrink-0 items-center rounded-lg bg-white px-1.5 ring-1 ring-gray-200">
           <img
-            src="/branding/gesys-logo.svg"
+            src="/branding/gesys-logo.png"
             alt="GESYS"
-            width={112}
-            height={28}
-            className="h-6 w-auto max-w-[7.5rem] object-contain object-left"
+            width={120}
+            height={32}
+            className="h-7 w-auto max-w-[5.75rem] object-contain object-left md:max-w-[6.5rem]"
             decoding="async"
+            onError={(e) => {
+              const el = e.currentTarget
+              if (!el.src.endsWith("gesys-logo.svg")) el.src = "/branding/gesys-logo.svg"
+            }}
           />
         </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold leading-tight text-gray-900 truncate">Presupuestos</p>
-          <p className="text-xs leading-tight text-gray-500 truncate">Gesys</p>
+        <div className="min-w-0 flex-1 pr-1">
+          <p className="text-sm font-semibold leading-snug text-gray-900 break-words">Presupuestos</p>
+          <p className="text-xs leading-snug text-gray-500">Gesys</p>
         </div>
         {headerAddon}
       </div>

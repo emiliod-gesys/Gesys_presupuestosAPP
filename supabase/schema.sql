@@ -261,12 +261,18 @@ create policy "companions_update" on companions
   for update to authenticated
   using (auth.uid() = companion_id or auth.uid() = user_id);
 
--- PROJECTS
+-- PROJECTS (incluye lectura si hay invitación pendiente como invitado)
 create policy "projects_select" on projects
   for select to authenticated
   using (
     created_by = auth.uid()
     or public.current_user_is_project_member(projects.id)
+    or exists (
+      select 1 from public.project_invitations pi
+      where pi.project_id = projects.id
+        and pi.invitee_id = auth.uid()
+        and pi.status = 'pending'
+    )
   );
 
 create policy "projects_insert" on projects
