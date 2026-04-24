@@ -1,3 +1,7 @@
+-- Nota: las políticas DELETE de tablas hijas no deben exigir
+-- project_editable_by_id: en proyectos archivados es false y Postgres
+-- no puede completar ON DELETE CASCADE al ejecutar DELETE FROM projects.
+--
 -- ============================================================
 -- 1) Borrado de proyecto: categorías hijas referencian parent_id
 --    sin ON DELETE CASCADE → falla el DELETE del proyecto.
@@ -101,8 +105,7 @@ drop policy if exists "transactions_delete" on public.transactions;
 create policy "transactions_delete" on public.transactions
   for delete to authenticated
   using (
-    public.project_editable_by_id(transactions.project_id)
-    and exists (
+    exists (
       select 1 from public.project_members pm
       where pm.project_id = transactions.project_id
         and pm.user_id = auth.uid()
@@ -133,19 +136,12 @@ drop policy if exists "transaction_comments_delete" on public.transaction_commen
 create policy "transaction_comments_delete" on public.transaction_comments
   for delete to authenticated
   using (
-    exists (
-      select 1 from public.transactions t
-      where t.id = transaction_comments.transaction_id
-        and public.project_editable_by_id(t.project_id)
-    )
-    and (
-      user_id = auth.uid()
-      or exists (
-        select 1 from public.transactions t2
-        inner join public.project_members pm
-          on pm.project_id = t2.project_id and pm.user_id = auth.uid() and pm.role = 'admin'
-        where t2.id = transaction_comments.transaction_id
-      )
+    user_id = auth.uid()
+    or exists (
+      select 1 from public.transactions t2
+      inner join public.project_members pm
+        on pm.project_id = t2.project_id and pm.user_id = auth.uid() and pm.role = 'admin'
+      where t2.id = transaction_comments.transaction_id
     )
   );
 
@@ -180,8 +176,7 @@ drop policy if exists "budget_categories_delete" on public.budget_categories;
 create policy "budget_categories_delete" on public.budget_categories
   for delete to authenticated
   using (
-    public.project_editable_by_id(budget_categories.project_id)
-    and exists (
+    exists (
       select 1 from public.project_members pm
       where pm.project_id = budget_categories.project_id
         and pm.user_id = auth.uid()
@@ -230,8 +225,7 @@ create policy "budget_alerts_update" on public.budget_alerts
 create policy "budget_alerts_delete" on public.budget_alerts
   for delete to authenticated
   using (
-    public.project_editable_by_id(budget_alerts.project_id)
-    and exists (
+    exists (
       select 1 from public.project_members pm
       where pm.project_id = budget_alerts.project_id
         and pm.user_id = auth.uid()
@@ -262,10 +256,7 @@ create policy "project_members_update" on public.project_members
 drop policy if exists "project_members_delete" on public.project_members;
 create policy "project_members_delete" on public.project_members
   for delete to authenticated
-  using (
-    public.project_editable_by_id(project_members.project_id)
-    and public.current_user_is_project_admin(project_members.project_id)
-  );
+  using (public.current_user_is_project_admin(project_members.project_id));
 
 -- ----- project_invitations -----
 drop policy if exists "project_invitations_insert" on public.project_invitations;

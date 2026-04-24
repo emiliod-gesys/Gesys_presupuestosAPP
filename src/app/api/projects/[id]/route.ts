@@ -109,21 +109,23 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
 
-  const { data: membership } = await supabase
-    .from("project_members")
-    .select("role")
-    .eq("project_id", id)
-    .eq("user_id", user.id)
-    .single()
-
-  if (!membership || membership.role !== "admin") {
-    return NextResponse.json({ error: "Solo administradores pueden eliminar el proyecto" }, { status: 403 })
-  }
-
-  const { error } = await supabase.from("projects").delete().eq("id", id)
+  const { error } = await supabase.rpc("delete_project_as_admin", { p_project_id: id })
   if (error) {
+    const msg = error.message ?? ""
+    if (/Solo administradores pueden eliminar el proyecto/i.test(msg)) {
+      return NextResponse.json(
+        { error: msg, code: error.code, hint: error.hint },
+        { status: 403 }
+      )
+    }
+    if (/Proyecto no encontrado/i.test(msg)) {
+      return NextResponse.json({ error: msg, code: error.code, hint: error.hint }, { status: 404 })
+    }
+    if (/No autorizado/i.test(msg)) {
+      return NextResponse.json({ error: msg, code: error.code, hint: error.hint }, { status: 401 })
+    }
     return NextResponse.json(
-      { error: error.message, code: error.code, hint: error.hint },
+      { error: msg || "No se pudo eliminar el proyecto", code: error.code, hint: error.hint },
       { status: 500 }
     )
   }

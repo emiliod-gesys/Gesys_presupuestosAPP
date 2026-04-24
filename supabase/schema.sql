@@ -217,6 +217,47 @@ $$;
 revoke all on function public.project_editable_by_id(uuid) from public;
 grant execute on function public.project_editable_by_id(uuid) to authenticated;
 
+-- Borrado de proyecto: el CASCADE con cliente anon + RLS falla si alguna tabla
+-- hija no tiene política DELETE o el orden invalida comprobaciones. Esta RPC
+-- comprueba admin y borra como propietario (postgres), sin depender del CASCADE vía RLS.
+create or replace function public.delete_project_as_admin(p_project_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  deleted_count int;
+begin
+  if auth.uid() is null then
+    raise exception 'No autorizado';
+  end if;
+
+  if not exists (
+    select 1
+    from public.project_members pm
+    where pm.project_id = p_project_id
+      and pm.user_id = auth.uid()
+      and pm.role = 'admin'
+  ) then
+    raise exception 'Solo administradores pueden eliminar el proyecto';
+  end if;
+
+  delete from public.projects
+  where id = p_project_id;
+
+  get diagnostics deleted_count = row_count;
+  if deleted_count = 0 then
+    raise exception 'Proyecto no encontrado';
+  end if;
+end;
+$$;
+
+alter function public.delete_project_as_admin(uuid) owner to postgres;
+
+revoke all on function public.delete_project_as_admin(uuid) from public;
+grant execute on function public.delete_project_as_admin(uuid) to authenticated;
+
 -- ============================================================
 -- PASO 2: HABILITAR RLS EN TODAS LAS TABLAS
 -- ============================================================
@@ -328,10 +369,7 @@ create policy "project_members_update" on project_members
 
 create policy "project_members_delete" on project_members
   for delete to authenticated
-  using (
-    public.project_editable_by_id(project_members.project_id)
-    and public.current_user_is_project_admin(project_members.project_id)
-  );
+  using (public.current_user_is_project_admin(project_members.project_id));
 
 -- PROJECT INVITATIONS
 create policy "project_invitations_select" on project_invitations
@@ -393,8 +431,7 @@ create policy "budget_categories_update" on budget_categories
 create policy "budget_categories_delete" on budget_categories
   for delete to authenticated
   using (
-    public.project_editable_by_id(budget_categories.project_id)
-    and exists (
+    exists (
       select 1 from project_members pm
       where pm.project_id = budget_categories.project_id
         and pm.user_id = auth.uid()
@@ -441,8 +478,7 @@ create policy "budget_alerts_update" on budget_alerts
 create policy "budget_alerts_delete" on budget_alerts
   for delete to authenticated
   using (
-    public.project_editable_by_id(budget_alerts.project_id)
-    and exists (
+    exists (
       select 1 from project_members pm
       where pm.project_id = budget_alerts.project_id
         and pm.user_id = auth.uid()
@@ -496,8 +532,7 @@ create policy "transactions_update" on transactions
 create policy "transactions_delete" on transactions
   for delete to authenticated
   using (
-    public.project_editable_by_id(transactions.project_id)
-    and exists (
+    exists (
       select 1 from project_members pm
       where pm.project_id = transactions.project_id
         and pm.user_id = auth.uid()
@@ -536,19 +571,12 @@ create policy "transaction_comments_insert" on transaction_comments
 create policy "transaction_comments_delete" on transaction_comments
   for delete to authenticated
   using (
-    exists (
-      select 1 from transactions t0
-      where t0.id = transaction_comments.transaction_id
-        and public.project_editable_by_id(t0.project_id)
-    )
-    and (
-      user_id = auth.uid()
-      or exists (
-        select 1 from transactions t
-        inner join project_members pm
-          on pm.project_id = t.project_id and pm.user_id = auth.uid() and pm.role = 'admin'
-        where t.id = transaction_comments.transaction_id
-      )
+    user_id = auth.uid()
+    or exists (
+      select 1 from transactions t
+      inner join project_members pm
+        on pm.project_id = t.project_id and pm.user_id = auth.uid() and pm.role = 'admin'
+      where t.id = transaction_comments.transaction_id
     )
   );
 
