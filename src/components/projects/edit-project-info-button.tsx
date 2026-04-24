@@ -18,12 +18,13 @@ export function EditProjectInfoButton({
   initial,
 }: {
   projectId: string
-  initial: { client: string; location: string; start_date: string; end_date: string }
+  initial: { name: string; client: string; location: string; start_date: string; end_date: string }
 }) {
   const router = useRouter()
   const { toast } = useToast()
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [projectName, setProjectName] = useState("")
   const [client, setClient] = useState("")
   const [location, setLocation] = useState("")
   const [startDate, setStartDate] = useState("")
@@ -31,13 +32,18 @@ export function EditProjectInfoButton({
 
   useEffect(() => {
     if (!open) return
+    setProjectName(initial.name || "")
     setClient(initial.client || "")
     setLocation(initial.location || "")
     setStartDate(toDateInputValue(initial.start_date))
     setEndDate(toDateInputValue(initial.end_date))
-  }, [open, initial.client, initial.location, initial.start_date, initial.end_date])
+  }, [open, initial.name, initial.client, initial.location, initial.start_date, initial.end_date])
 
   const save = async () => {
+    if (!projectName.trim()) {
+      toast("error", "El nombre del proyecto es obligatorio")
+      return
+    }
     setLoading(true)
     try {
       const res = await fetch(`/api/projects/${projectId}`, {
@@ -45,6 +51,7 @@ export function EditProjectInfoButton({
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          name: projectName.trim(),
           client,
           location,
           start_date: startDate,
@@ -74,6 +81,13 @@ export function EditProjectInfoButton({
       </Button>
       <Modal open={open} onClose={() => !loading && setOpen(false)} title="Información del proyecto" size="md">
         <div className="space-y-4 px-4 py-4 sm:px-6">
+          <Input
+            label="Nombre del proyecto"
+            value={projectName}
+            onChange={(e) => setProjectName(e.target.value)}
+            placeholder="Ej. Residencial Terravista"
+            required
+          />
           <Input label="Cliente" value={client} onChange={(e) => setClient(e.target.value)} placeholder="Nombre del cliente" />
           <Input
             label="Ubicación"

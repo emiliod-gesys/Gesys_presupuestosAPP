@@ -42,6 +42,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
   const { pct: totalPct, bg: totalBg } = getBudgetStatus(Math.max(0, totalSpent), project.total_budget)
 
   const editInfoInitial = {
+    name: project.name ?? "",
     client: project.client ?? "",
     location: project.location ?? "",
     start_date: project.start_date ? String(project.start_date) : "",

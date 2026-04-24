@@ -47,7 +47,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return s
   }
 
+  const nameRaw = typeof json.name === "string" ? json.name.trim() : ""
+  if (!nameRaw) {
+    return NextResponse.json({ error: "El nombre del proyecto es obligatorio" }, { status: 400 })
+  }
+
   const update = {
+    name: nameRaw,
     client: toNullOrTrim(json.client),
     location: toNullOrTrim(json.location),
     start_date: toDateOrNull(json.start_date),
@@ -62,7 +68,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     project_id: id,
     user_id: user.id,
     action: "project_info_updated",
-    details: { client: update.client, location: update.location, start_date: update.start_date, end_date: update.end_date },
+    details: {
+      name: update.name,
+      client: update.client,
+      location: update.location,
+      start_date: update.start_date,
+      end_date: update.end_date,
+    },
   })
 
   return NextResponse.json({ ok: true })
