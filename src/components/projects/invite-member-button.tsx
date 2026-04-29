@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
@@ -9,13 +9,22 @@ import { Select } from "@/components/ui/select"
 import { Modal } from "@/components/ui/modal"
 import { Avatar } from "@/components/ui/avatar"
 import { useToast } from "@/components/ui/toast"
-import { UserPlus, Search } from "lucide-react"
+import { UserPlus, Search, X } from "lucide-react"
+import type { UserRole } from "@/lib/types"
 
 type CompanionProfile = {
   id: string
   full_name: string | null
   email: string
   avatar_url: string | null
+}
+
+type InviteeEntry = {
+  id: string
+  full_name: string | null
+  email: string
+  avatar_url: string | null
+  role: UserRole
 }
 
 function profileFromJoin(raw: unknown): CompanionProfile | null {
@@ -31,16 +40,43 @@ function profileFromJoin(raw: unknown): CompanionProfile | null {
   }
 }
 
+function toInviteeEntry(p: CompanionProfile, role: UserRole = "worker"): InviteeEntry {
+  return {
+    id: p.id,
+    full_name: p.full_name,
+    email: p.email,
+    avatar_url: p.avatar_url,
+    role,
+  }
+}
+
+const ROLE_OPTIONS = [
+  { value: "admin", label: "Administrador - Puede editar todo" },
+  { value: "worker", label: "Trabajador - Puede cargar información" },
+  { value: "observer", label: "Observador - Solo puede visualizar" },
+] as const
+
 export function InviteMemberButton({ projectId }: { projectId: string }) {
   const router = useRouter()
   const { toast } = useToast()
   const [open, setOpen] = useState(false)
   const [email, setEmail] = useState("")
-  const [role, setRole] = useState<"admin" | "worker" | "observer">("worker")
-  const [found, setFound] = useState<{ id: string; full_name?: string; email: string; avatar_url?: string } | null>(null)
   const [searching, setSearching] = useState(false)
   const [loading, setLoading] = useState(false)
   const [companionSuggestions, setCompanionSuggestions] = useState<CompanionProfile[]>([])
+  const [searchHit, setSearchHit] = useState<CompanionProfile | null>(null)
+  const [selected, setSelected] = useState<Map<string, InviteeEntry>>(() => new Map())
+
+  const resetForm = useCallback(() => {
+    setEmail("")
+    setSearchHit(null)
+  }, [])
+
+  const handleClose = useCallback(() => {
+    setOpen(false)
+    setSelected(new Map())
+    resetForm()
+  }, [resetForm])
 
   useEffect(() => {
     if (!open) return
@@ -81,73 +117,135 @@ export function InviteMemberButton({ projectId }: { projectId: string }) {
     }
   }, [open, projectId])
 
+  const toggleCompanion = (p: CompanionProfile) => {
+    setSelected((prev) => {
+      const next = new Map(prev)
+      if (next.has(p.id)) {
+        next.delete(p.id)
+      } else {
+        next.set(p.id, toInviteeEntry(p, "worker"))
+      }
+      return next
+    })
+  }
+
+  const setEntryRole = (id: string, role: UserRole) => {
+    setSelected((prev) => {
+      const next = new Map(prev)
+      const e = next.get(id)
+      if (e) next.set(id, { ...e, role })
+      return next
+    })
+  }
+
+  const removeInvitee = (id: string) => {
+    setSelected((prev) => {
+      const next = new Map(prev)
+      next.delete(id)
+      return next
+    })
+  }
+
   const search = async () => {
     if (!email.trim()) return
     setSearching(true)
-    setFound(null)
+    setSearchHit(null)
     const supabase = createClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
     const { data } = await supabase
       .from("profiles")
       .select("id, full_name, email, avatar_url")
       .ilike("email", email.trim())
+      .neq("id", user?.id ?? "")
       .single()
-    setFound(data || null)
-    if (!data) toast("warning", "No se encontró ningún usuario con ese correo")
+    if (data) {
+      setSearchHit({
+        id: data.id,
+        full_name: data.full_name,
+        email: data.email,
+        avatar_url: data.avatar_url,
+      })
+    } else {
+      toast("warning", "No se encontró ningún usuario con ese correo")
+    }
     setSearching(false)
   }
 
-  const invite = async () => {
-    if (!found) return
+  const addSearchHitToSelection = () => {
+    if (!searchHit) return
+    if (selected.has(searchHit.id)) {
+      toast("warning", "Ese usuario ya está en la lista de invitación")
+      return
+    }
+    setSelected((prev) => {
+      const next = new Map(prev)
+      next.set(searchHit.id, toInviteeEntry(searchHit, "worker"))
+      return next
+    })
+    setSearchHit(null)
+    setEmail("")
+  }
+
+  const sendInvitations = async () => {
+    const invitees = [...selected.values()]
+    if (invitees.length === 0) return
+
     setLoading(true)
     const supabase = createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-
-    // Check if already member
-    const { data: existing } = await supabase
-      .from("project_members")
-      .select("id")
-      .eq("project_id", projectId)
-      .eq("user_id", found.id)
-      .single()
-
-    if (existing) {
-      toast("error", "Este usuario ya es miembro del proyecto")
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user) {
       setLoading(false)
       return
     }
 
-    const { data: projectRow } = await supabase
-      .from("projects")
-      .select("name")
-      .eq("id", projectId)
-      .single()
-
+    const { data: projectRow } = await supabase.from("projects").select("name").eq("id", projectId).single()
     const projectName = projectRow?.name?.trim() || "Proyecto"
 
-    const { data: invitation, error } = await supabase
-      .from("project_invitations")
-      .insert({
-        project_id: projectId,
-        inviter_id: user.id,
-        invitee_id: found.id,
-        role,
-      })
-      .select("id")
-      .single()
+    const succeededIds: string[] = []
+    const errors: string[] = []
 
-    if (error) {
-      if (error.code === "23505") {
-        toast("error", "Ya existe una invitación pendiente para este usuario")
-      } else {
-        toast("error", "Error al enviar la invitación")
+    for (const entry of invitees) {
+      const { data: existing } = await supabase
+        .from("project_members")
+        .select("id")
+        .eq("project_id", projectId)
+        .eq("user_id", entry.id)
+        .maybeSingle()
+
+      if (existing) {
+        errors.push(`${entry.email}: ya es miembro`)
+        continue
       }
-    } else {
+
+      const { data: invitation, error } = await supabase
+        .from("project_invitations")
+        .insert({
+          project_id: projectId,
+          inviter_id: user.id,
+          invitee_id: entry.id,
+          role: entry.role,
+        })
+        .select("id")
+        .single()
+
+      if (error) {
+        if (error.code === "23505") {
+          errors.push(`${entry.email}: ya hay invitación pendiente`)
+        } else {
+          errors.push(`${entry.email}: error al invitar`)
+        }
+        continue
+      }
+
       const roleLabel =
-        role === "admin" ? "Administrador" : role === "worker" ? "Trabajador" : "Observador"
-      // Create notification for invitee (data para UI: nombre + id de invitación)
+        entry.role === "admin" ? "Administrador" : entry.role === "worker" ? "Trabajador" : "Observador"
+
       await supabase.from("notifications").insert({
-        user_id: found.id,
+        user_id: entry.id,
         project_id: projectId,
         type: "project_invitation",
         title: "Nueva invitación a proyecto",
@@ -155,7 +253,7 @@ export function InviteMemberButton({ projectId }: { projectId: string }) {
         data: {
           invitation_id: invitation?.id,
           project_name: projectName,
-          role,
+          role: entry.role,
         },
       })
 
@@ -163,17 +261,39 @@ export function InviteMemberButton({ projectId }: { projectId: string }) {
         project_id: projectId,
         user_id: user.id,
         action: "member_invited",
-        details: { invitee_email: found.email, role },
+        details: { invitee_email: entry.email, role: entry.role },
       })
 
-      toast("success", "Invitación enviada")
-      setOpen(false)
-      setEmail("")
-      setFound(null)
+      succeededIds.push(entry.id)
+    }
+
+    const sent = succeededIds.length
+
+    if (sent > 0) {
       router.refresh()
     }
+
+    if (sent === invitees.length && errors.length === 0) {
+      toast("success", sent === 1 ? "Invitación enviada" : `${sent} invitaciones enviadas`)
+      handleClose()
+    } else if (sent > 0) {
+      setSelected((prev) => {
+        const next = new Map(prev)
+        succeededIds.forEach((id) => next.delete(id))
+        return next
+      })
+      toast(
+        "warning",
+        `${sent} enviada(s). Con incidencias: ${errors.slice(0, 3).join("; ")}${errors.length > 3 ? "…" : ""}`
+      )
+    } else {
+      toast("error", errors.join("; ") || "No se pudo enviar ninguna invitación")
+    }
+
     setLoading(false)
   }
+
+  const selectedList = [...selected.values()]
 
   return (
     <>
@@ -181,39 +301,35 @@ export function InviteMemberButton({ projectId }: { projectId: string }) {
         <UserPlus className="h-3.5 w-3.5" /> Invitar miembro
       </Button>
 
-      <Modal open={open} onClose={() => setOpen(false)} title="Invitar miembro al proyecto">
+      <Modal open={open} onClose={handleClose} title="Invitar miembros al proyecto" size="lg">
         <div className="p-6 space-y-4">
           {companionSuggestions.length > 0 && (
             <div>
               <p className="text-xs font-medium text-gray-700">Tus compañeros</p>
               <p className="mt-0.5 text-xs text-gray-500">
-                Pulsa un contacto para invitarlo con el rol que elijas abajo.
+                Pulsa para seleccionar o quitar. Cada persona tendrá su rol en la lista de abajo.
               </p>
               <div className="mt-2 flex flex-wrap gap-2">
-                {companionSuggestions.map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() =>
-                      setFound({
-                        id: p.id,
-                        full_name: p.full_name ?? undefined,
-                        email: p.email,
-                        avatar_url: p.avatar_url ?? undefined,
-                      })
-                    }
-                    className={`flex items-center gap-2 rounded-xl border px-2.5 py-1.5 text-left text-xs transition-colors ${
-                      found?.id === p.id
-                        ? "border-indigo-500 bg-indigo-50 ring-1 ring-indigo-200"
-                        : "border-gray-200 bg-white hover:border-indigo-200 hover:bg-indigo-50/50"
-                    }`}
-                  >
-                    <Avatar src={p.avatar_url} name={p.full_name || p.email} size="sm" />
-                    <span className="max-w-[10rem] truncate font-medium text-gray-900">
-                      {p.full_name || p.email}
-                    </span>
-                  </button>
-                ))}
+                {companionSuggestions.map((p) => {
+                  const isOn = selected.has(p.id)
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => toggleCompanion(p)}
+                      className={`flex items-center gap-2 rounded-xl border px-2.5 py-1.5 text-left text-xs transition-colors ${
+                        isOn
+                          ? "border-indigo-500 bg-indigo-50 ring-2 ring-indigo-200"
+                          : "border-gray-200 bg-white hover:border-indigo-200 hover:bg-indigo-50/50"
+                      }`}
+                    >
+                      <Avatar src={p.avatar_url} name={p.full_name || p.email} size="sm" />
+                      <span className="max-w-[10rem] truncate font-medium text-gray-900">
+                        {p.full_name || p.email}
+                      </span>
+                    </button>
+                  )
+                })}
               </div>
             </div>
           )}
@@ -235,31 +351,72 @@ export function InviteMemberButton({ projectId }: { projectId: string }) {
             </div>
           </div>
 
-          {found && (
-            <div className="flex items-center gap-3 p-3 bg-indigo-50 border border-indigo-100 rounded-xl">
-              <Avatar src={found.avatar_url} name={found.full_name || found.email} size="md" />
-              <div className="flex-1">
-                <p className="text-sm font-semibold text-gray-900">{found.full_name || "Sin nombre"}</p>
-                <p className="text-xs text-gray-500">{found.email}</p>
+          {searchHit && (
+            <div className="flex flex-col gap-2 rounded-xl border border-indigo-100 bg-indigo-50/80 p-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-3">
+                <Avatar src={searchHit.avatar_url} name={searchHit.full_name || searchHit.email} size="md" />
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">{searchHit.full_name || "Sin nombre"}</p>
+                  <p className="text-xs text-gray-500">{searchHit.email}</p>
+                </div>
               </div>
+              <Button type="button" size="sm" variant="primary" onClick={addSearchHitToSelection}>
+                Añadir a la lista
+              </Button>
             </div>
           )}
 
-          <Select
-            label="Rol a asignar"
-            options={[
-              { value: "admin", label: "Administrador - Puede editar todo" },
-              { value: "worker", label: "Trabajador - Puede cargar información" },
-              { value: "observer", label: "Observador - Solo puede visualizar" },
-            ]}
-            value={role}
-            onChange={(e) => setRole(e.target.value as "admin" | "worker" | "observer")}
-          />
+          {selectedList.length > 0 && (
+            <div className="space-y-3 rounded-xl border border-gray-200 bg-gray-50/80 p-3">
+              <p className="text-xs font-medium text-gray-800">
+                Invitar ({selectedList.length}) — rol por persona
+              </p>
+              <ul className="space-y-3">
+                {selectedList.map((entry) => (
+                  <li
+                    key={entry.id}
+                    className="flex flex-col gap-2 rounded-lg border border-gray-100 bg-white p-3 sm:flex-row sm:items-end sm:gap-3"
+                  >
+                    <div className="flex min-w-0 flex-1 items-center gap-2">
+                      <Avatar src={entry.avatar_url} name={entry.full_name || entry.email} size="sm" />
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-gray-900">
+                          {entry.full_name || "Sin nombre"}
+                        </p>
+                        <p className="truncate text-xs text-gray-500">{entry.email}</p>
+                      </div>
+                    </div>
+                    <div className="flex flex-1 flex-col gap-2 sm:flex-row sm:items-end">
+                      <div className="min-w-0 flex-1">
+                        <Select
+                          id={`invite-role-${entry.id}`}
+                          label="Rol"
+                          options={ROLE_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+                          value={entry.role}
+                          onChange={(e) => setEntryRole(entry.id, e.target.value as UserRole)}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeInvitee(entry.id)}
+                        className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600"
+                        aria-label={`Quitar a ${entry.full_name || entry.email}`}
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           <div className="flex justify-end gap-3 pt-2">
-            <Button variant="ghost" onClick={() => setOpen(false)}>Cancelar</Button>
-            <Button onClick={invite} loading={loading} disabled={!found}>
-              Enviar invitación
+            <Button variant="ghost" onClick={handleClose}>
+              Cancelar
+            </Button>
+            <Button onClick={() => void sendInvitations()} loading={loading} disabled={selectedList.length === 0}>
+              {selectedList.length <= 1 ? "Enviar invitación" : `Enviar ${selectedList.length} invitaciones`}
             </Button>
           </div>
         </div>
