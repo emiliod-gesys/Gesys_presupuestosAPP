@@ -11,6 +11,26 @@ import { Avatar } from "@/components/ui/avatar"
 import { useToast } from "@/components/ui/toast"
 import { UserPlus, Search } from "lucide-react"
 
+type CompanionProfile = {
+  id: string
+  full_name: string | null
+  email: string
+  avatar_url: string | null
+}
+
+function profileFromJoin(raw: unknown): CompanionProfile | null {
+  if (!raw) return null
+  const row = Array.isArray(raw) ? raw[0] : raw
+  if (!row || typeof row !== "object" || !("id" in row) || !("email" in row)) return null
+  const o = row as Record<string, unknown>
+  return {
+    id: String(o.id),
+    full_name: (o.full_name as string | null) ?? null,
+    email: String(o.email),
+    avatar_url: (o.avatar_url as string | null) ?? null,
+  }
+}
+
 export function InviteMemberButton({ projectId }: { projectId: string }) {
   const router = useRouter()
   const { toast } = useToast()
@@ -20,9 +40,7 @@ export function InviteMemberButton({ projectId }: { projectId: string }) {
   const [found, setFound] = useState<{ id: string; full_name?: string; email: string; avatar_url?: string } | null>(null)
   const [searching, setSearching] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [companionSuggestions, setCompanionSuggestions] = useState<
-    { id: string; full_name: string | null; email: string; avatar_url: string | null }[]
-  >([])
+  const [companionSuggestions, setCompanionSuggestions] = useState<CompanionProfile[]>([])
 
   useEffect(() => {
     if (!open) return
@@ -47,15 +65,12 @@ export function InviteMemberButton({ projectId }: { projectId: string }) {
       if (cancelled) return
 
       const memberIds = new Set((members || []).map((m) => m.user_id))
-      type P = { id: string; full_name: string | null; email: string; avatar_url: string | null }
       const accepted = (companions || []).filter((c) => c.status === "accepted")
-      const others: P[] = []
+      const others: CompanionProfile[] = []
       for (const c of accepted) {
-        const other =
-          c.user_id === user.id
-            ? (c.companion as P | null | undefined)
-            : (c.user as P | null | undefined)
-        if (other?.id && !memberIds.has(other.id)) {
+        const raw = c.user_id === user.id ? c.companion : c.user
+        const other = profileFromJoin(raw)
+        if (other && !memberIds.has(other.id)) {
           others.push(other)
         }
       }
