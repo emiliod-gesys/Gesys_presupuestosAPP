@@ -6,8 +6,8 @@ import { ToastProvider } from "@/components/ui/toast"
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" })
 
 export const metadata: Metadata = {
-  title: "Gesys Presupuestos",
-  description: "Sistema de gestión de presupuestos de proyectos",
+  title: "PresuCore",
+  description: "Gestión de presupuestos de proyectos por Gesys",
 }
 
 export const viewport = {
