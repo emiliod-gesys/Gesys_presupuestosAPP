@@ -20,7 +20,10 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
   const [{ data: project }, { data: membership }, { data: members }, { data: categories }] = await Promise.all([
     supabase.from("projects").select("*, creator:profiles!created_by(full_name, email, avatar_url)").eq("id", id).single(),
     supabase.from("project_members").select("role").eq("project_id", id).eq("user_id", user.id).single(),
-    supabase.from("project_members").select("role, user:profiles(full_name, email, avatar_url)").eq("project_id", id),
+    supabase
+      .from("project_members")
+      .select("role, user:profiles!user_id(full_name, email, avatar_url)")
+      .eq("project_id", id),
     supabase.from("budget_categories").select("id, name, budget_amount, parent_id, order_index, description").eq("project_id", id).order("order_index"),
   ])
 

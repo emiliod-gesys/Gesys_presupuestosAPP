@@ -24,7 +24,12 @@ export function RemoveMemberButton({ memberId, projectId, userName }: Props) {
     const { data: { user } } = await supabase.auth.getUser()
     const { data: member } = await supabase.from("project_members").select("user_id").eq("id", memberId).single()
 
-    await supabase.from("project_members").delete().eq("id", memberId)
+    const { error: delErr } = await supabase.from("project_members").delete().eq("id", memberId)
+    if (delErr) {
+      toast("error", delErr.message || "No se pudo remover al miembro")
+      setLoading(false)
+      return
+    }
 
     if (user && member) {
       await supabase.from("project_logs").insert({

@@ -6,7 +6,10 @@ import { Avatar } from "@/components/ui/avatar"
 import { formatDateTime } from "@/lib/utils"
 import { InviteMemberButton } from "@/components/projects/invite-member-button"
 import { RemoveMemberButton } from "@/components/projects/remove-member-button"
+import { ChangeMemberRoleSelect } from "@/components/projects/change-member-role-select"
 import type { UserRole } from "@/lib/types"
+
+export const dynamic = "force-dynamic"
 
 export default async function MembersPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -19,7 +22,7 @@ export default async function MembersPage({ params }: { params: Promise<{ id: st
       supabase.from("project_members").select("role").eq("project_id", id).eq("user_id", user.id).single(),
       supabase
         .from("project_members")
-        .select("*, user:profiles(full_name, email, avatar_url)")
+        .select("*, user:profiles!user_id(full_name, email, avatar_url)")
         .eq("project_id", id)
         .order("joined_at"),
       supabase
@@ -61,10 +64,20 @@ export default async function MembersPage({ params }: { params: Promise<{ id: st
                     <p className="text-xs text-gray-500">{u?.email}</p>
                     <p className="text-xs text-gray-400 mt-0.5">Miembro desde {formatDateTime(m.joined_at)}</p>
                   </div>
-                  <RoleBadge role={m.role as UserRole} />
-                  {isAdmin && !isSelf && !readOnly && (
-                    <RemoveMemberButton memberId={m.id} projectId={id} userName={u?.full_name || u?.email || "este miembro"} />
-                  )}
+                  <div className="flex flex-shrink-0 items-center gap-2">
+                    {isAdmin && !isSelf && !readOnly ? (
+                      <>
+                        <ChangeMemberRoleSelect memberId={m.id} value={m.role as UserRole} />
+                        <RemoveMemberButton
+                          memberId={m.id}
+                          projectId={id}
+                          userName={u?.full_name || u?.email || "este miembro"}
+                        />
+                      </>
+                    ) : (
+                      <RoleBadge role={m.role as UserRole} />
+                    )}
+                  </div>
                 </div>
               )
             })}
