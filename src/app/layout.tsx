@@ -7,7 +7,7 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter" })
 
 export const metadata: Metadata = {
   title: "PresuCore",
-  description: "Gestión de presupuestos de proyectos por Gesys",
+  description: "Aplicación de gestión de presupuestos por Gesys",
 }
 
 export const viewport = {
