@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
@@ -20,6 +20,51 @@ export function InviteMemberButton({ projectId }: { projectId: string }) {
   const [found, setFound] = useState<{ id: string; full_name?: string; email: string; avatar_url?: string } | null>(null)
   const [searching, setSearching] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [companionSuggestions, setCompanionSuggestions] = useState<
+    { id: string; full_name: string | null; email: string; avatar_url: string | null }[]
+  >([])
+
+  useEffect(() => {
+    if (!open) return
+    let cancelled = false
+    ;(async () => {
+      const supabase = createClient()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user || cancelled) return
+
+      const [{ data: companions }, { data: members }] = await Promise.all([
+        supabase
+          .from("companions")
+          .select(
+            "user_id, companion_id, status, companion:profiles!companion_id(id, full_name, email, avatar_url), user:profiles!user_id(id, full_name, email, avatar_url)"
+          )
+          .or(`user_id.eq.${user.id},companion_id.eq.${user.id}`),
+        supabase.from("project_members").select("user_id").eq("project_id", projectId),
+      ])
+
+      if (cancelled) return
+
+      const memberIds = new Set((members || []).map((m) => m.user_id))
+      type P = { id: string; full_name: string | null; email: string; avatar_url: string | null }
+      const accepted = (companions || []).filter((c) => c.status === "accepted")
+      const others: P[] = []
+      for (const c of accepted) {
+        const other =
+          c.user_id === user.id
+            ? (c.companion as P | null | undefined)
+            : (c.user as P | null | undefined)
+        if (other?.id && !memberIds.has(other.id)) {
+          others.push(other)
+        }
+      }
+      setCompanionSuggestions(others)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [open, projectId])
 
   const search = async () => {
     if (!email.trim()) return
@@ -123,6 +168,41 @@ export function InviteMemberButton({ projectId }: { projectId: string }) {
 
       <Modal open={open} onClose={() => setOpen(false)} title="Invitar miembro al proyecto">
         <div className="p-6 space-y-4">
+          {companionSuggestions.length > 0 && (
+            <div>
+              <p className="text-xs font-medium text-gray-700">Tus compañeros</p>
+              <p className="mt-0.5 text-xs text-gray-500">
+                Pulsa un contacto para invitarlo con el rol que elijas abajo.
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {companionSuggestions.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() =>
+                      setFound({
+                        id: p.id,
+                        full_name: p.full_name ?? undefined,
+                        email: p.email,
+                        avatar_url: p.avatar_url ?? undefined,
+                      })
+                    }
+                    className={`flex items-center gap-2 rounded-xl border px-2.5 py-1.5 text-left text-xs transition-colors ${
+                      found?.id === p.id
+                        ? "border-indigo-500 bg-indigo-50 ring-1 ring-indigo-200"
+                        : "border-gray-200 bg-white hover:border-indigo-200 hover:bg-indigo-50/50"
+                    }`}
+                  >
+                    <Avatar src={p.avatar_url} name={p.full_name || p.email} size="sm" />
+                    <span className="max-w-[10rem] truncate font-medium text-gray-900">
+                      {p.full_name || p.email}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="flex gap-2">
             <Input
               label="Buscar por correo electrónico"

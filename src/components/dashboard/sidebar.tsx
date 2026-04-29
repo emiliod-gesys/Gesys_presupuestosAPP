@@ -72,8 +72,7 @@ export function Sidebar({
           />
         </div>
         <div className="min-w-0 flex-1 pr-1">
-          <p className="text-sm font-semibold leading-snug text-gray-900 break-words">Presupuestos</p>
-          <p className="text-xs leading-snug text-gray-500">Gesys</p>
+          <p className="text-sm font-semibold leading-snug text-gray-900 break-words">PresuCore</p>
         </div>
         {headerAddon}
       </div>

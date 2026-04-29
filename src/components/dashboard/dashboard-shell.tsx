@@ -51,7 +51,7 @@ export function DashboardShell({ profile, unreadCount, children }: DashboardShel
             />
           </div>
           <span className="min-w-0 text-sm font-semibold leading-tight text-gray-900 break-words">
-            Presupuestos
+            PresuCore
           </span>
         </div>
       </header>

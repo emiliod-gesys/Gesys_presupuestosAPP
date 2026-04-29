@@ -43,10 +43,14 @@ export function AddCompanionButton() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
-    const { error } = await supabase.from("companions").insert({
-      user_id: user.id,
-      companion_id: found.id,
-    })
+    const { data: companionRow, error } = await supabase
+      .from("companions")
+      .insert({
+        user_id: user.id,
+        companion_id: found.id,
+      })
+      .select("id")
+      .single()
 
     if (error) {
       if (error.code === "23505") {
@@ -60,6 +64,7 @@ export function AddCompanionButton() {
         type: "companion_request",
         title: "Nueva solicitud de compañero",
         message: "Alguien quiere agregarte como compañero.",
+        data: companionRow?.id ? { companion_row_id: companionRow.id } : null,
       })
       toast("success", "Solicitud enviada")
       setOpen(false)

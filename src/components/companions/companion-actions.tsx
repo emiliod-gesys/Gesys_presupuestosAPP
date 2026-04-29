@@ -10,9 +10,11 @@ import { Check, X, UserMinus } from "lucide-react"
 interface Props {
   companionId: string
   action: "respond" | "remove"
+  /** Si viene de una notificación, marcarla leída al responder la solicitud */
+  notificationId?: string
 }
 
-export function CompanionActions({ companionId, action }: Props) {
+export function CompanionActions({ companionId, action, notificationId }: Props) {
   const router = useRouter()
   const { toast } = useToast()
   const [loading, setLoading] = useState<string | null>(null)
@@ -21,6 +23,9 @@ export function CompanionActions({ companionId, action }: Props) {
     setLoading(status)
     const supabase = createClient()
     await supabase.from("companions").update({ status }).eq("id", companionId)
+    if (notificationId) {
+      await supabase.from("notifications").update({ is_read: true }).eq("id", notificationId)
+    }
     toast("success", status === "accepted" ? "Solicitud aceptada" : "Solicitud rechazada")
     setLoading(null)
     router.refresh()
