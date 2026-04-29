@@ -40,9 +40,9 @@ export function DashboardShell({ profile, unreadCount, children }: DashboardShel
             <img
               src="/branding/gesys-logo.png"
               alt="GESYS"
-              width={100}
-              height={28}
-              className="h-6 w-auto max-w-[4.75rem] object-contain object-left sm:max-w-[5.5rem]"
+              width={256}
+              height={72}
+              className="h-6 w-auto max-w-[6.25rem] object-contain object-left sm:max-w-[7rem]"
               decoding="async"
               onError={(e) => {
                 const el = e.currentTarget

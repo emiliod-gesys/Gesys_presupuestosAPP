@@ -61,9 +61,9 @@ export function Sidebar({
           <img
             src="/branding/gesys-logo.png"
             alt="GESYS"
-            width={120}
-            height={32}
-            className="h-7 w-auto max-w-[5.75rem] object-contain object-left md:max-w-[6.5rem]"
+            width={256}
+            height={72}
+            className="h-7 w-auto max-w-[7.5rem] object-contain object-left md:max-w-[9rem]"
             decoding="async"
             onError={(e) => {
               const el = e.currentTarget
