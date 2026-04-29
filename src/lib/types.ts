@@ -33,6 +33,13 @@ export interface Companion {
   user?: Profile
 }
 
+export interface ProjectFamily {
+  id: string
+  name: string
+  created_by: string
+  created_at: string
+}
+
 export interface Project {
   id: string
   name: string
@@ -44,12 +51,14 @@ export interface Project {
   status: ProjectStatus
   is_template: boolean
   template_id: string | null
+  family_id?: string | null
   created_by: string
   total_budget: number
   currency: string
   created_at: string
   updated_at: string
   creator?: Profile
+  family?: ProjectFamily | null
   my_role?: UserRole
   member_count?: number
   spent?: number

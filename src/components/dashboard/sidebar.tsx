@@ -9,6 +9,7 @@ import { Avatar } from "@/components/ui/avatar"
 import {
   LayoutDashboard,
   Users,
+  Network,
   LogOut,
   ChevronRight,
 } from "lucide-react"
@@ -27,6 +28,7 @@ interface SidebarProps {
 
 const nav = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/project-families", label: "Familias de proyectos", icon: Network },
   { href: "/companions", label: "Compañeros", icon: Users },
 ]
 

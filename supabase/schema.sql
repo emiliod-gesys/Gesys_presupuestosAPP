@@ -35,6 +35,13 @@ create table if not exists companions (
   unique(user_id, companion_id)
 );
 
+create table if not exists project_families (
+  id uuid default gen_random_uuid() primary key,
+  name text not null,
+  created_by uuid references profiles(id) on delete cascade not null,
+  created_at timestamptz default now() not null
+);
+
 create table if not exists projects (
   id uuid default gen_random_uuid() primary key,
   name text not null,
@@ -46,6 +53,7 @@ create table if not exists projects (
   status text check (status in ('active', 'completed', 'archived')) default 'active',
   is_template boolean default false,
   template_id uuid references projects(id) on delete set null,
+  family_id uuid references project_families(id) on delete set null,
   created_by uuid references profiles(id) not null,
   total_budget numeric(15,2) default 0,
   currency text default 'GTQ',
@@ -265,6 +273,7 @@ grant execute on function public.delete_project_as_admin(uuid) to authenticated;
 alter table profiles enable row level security;
 alter table user_odoo_settings enable row level security;
 alter table companions enable row level security;
+alter table project_families enable row level security;
 alter table projects enable row level security;
 alter table project_members enable row level security;
 alter table project_invitations enable row level security;
@@ -318,6 +327,31 @@ create policy "companions_insert" on companions
 create policy "companions_update" on companions
   for update to authenticated
   using (auth.uid() = companion_id or auth.uid() = user_id);
+
+-- PROJECT FAMILIES (agrupar proyectos hermanos)
+create policy "project_families_select" on project_families
+  for select to authenticated
+  using (
+    created_by = auth.uid()
+    or exists (
+      select 1
+      from projects p
+      inner join project_members pm on pm.project_id = p.id and pm.user_id = auth.uid()
+      where p.family_id = project_families.id
+    )
+  );
+
+create policy "project_families_insert" on project_families
+  for insert to authenticated
+  with check (auth.uid() = created_by);
+
+create policy "project_families_update" on project_families
+  for update to authenticated
+  using (created_by = auth.uid());
+
+create policy "project_families_delete" on project_families
+  for delete to authenticated
+  using (created_by = auth.uid());
 
 -- PROJECTS (incluye lectura si hay invitación pendiente como invitado)
 create policy "projects_select" on projects
@@ -835,6 +869,7 @@ create trigger trg_projects_enforce_archived
 -- PASO 8: ÍNDICES
 -- ============================================================
 
+create index if not exists idx_projects_family_id      on projects(family_id);
 create index if not exists idx_project_members_user    on project_members(user_id);
 create index if not exists idx_project_members_project on project_members(project_id);
 create index if not exists idx_transactions_project    on transactions(project_id);

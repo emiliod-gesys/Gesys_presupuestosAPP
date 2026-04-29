@@ -8,6 +8,8 @@ import { budgetCategorySections } from "@/lib/budget-category-tree"
 import { MapPin, Calendar, Users, Building2 } from "lucide-react"
 import { ProjectStatusActions } from "@/components/projects/project-status-actions"
 import { DuplicateProjectButton } from "@/components/projects/duplicate-project-button"
+import { CreateSiblingProjectButton } from "@/components/projects/create-sibling-project-button"
+import Link from "next/link"
 import { EditProjectInfoButton } from "@/components/projects/edit-project-info-button"
 import { DeleteProjectButton } from "@/components/projects/delete-project-button"
 
@@ -18,7 +20,11 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
   if (!user) redirect("/login")
 
   const [{ data: project }, { data: membership }, { data: members }, { data: categories }] = await Promise.all([
-    supabase.from("projects").select("*, creator:profiles!created_by(full_name, email, avatar_url)").eq("id", id).single(),
+    supabase
+      .from("projects")
+      .select("*, creator:profiles!created_by(full_name, email, avatar_url), family:project_families(id, name)")
+      .eq("id", id)
+      .single(),
     supabase.from("project_members").select("role").eq("project_id", id).eq("user_id", user.id).single(),
     supabase
       .from("project_members")
@@ -30,6 +36,8 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
   if (!project || !membership) redirect("/dashboard")
 
   const readOnly = project.status === "archived"
+  const famRaw = project.family as { id: string; name: string } | { id: string; name: string }[] | null | undefined
+  const family = Array.isArray(famRaw) ? famRaw[0] ?? null : famRaw ?? null
 
   // Get spending per category
   const { data: txData } = await supabase
@@ -71,11 +79,27 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
                     Plantilla
                   </span>
                 )}
+                {family && (
+                  <Link
+                    href={`/project-families/${family.id}`}
+                    className="rounded-full bg-teal-50 px-2 py-0.5 text-xs font-medium text-teal-800 ring-1 ring-teal-200 hover:bg-teal-100"
+                  >
+                    Familia: {family.name}
+                  </Link>
+                )}
               </div>
               {membership.role === "admin" && (
                 <div className="flex w-full flex-col gap-2 sm:ml-auto sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
                   {!readOnly && <EditProjectInfoButton projectId={id} initial={editInfoInitial} />}
                   {!readOnly && <DuplicateProjectButton projectId={id} />}
+                  {!readOnly && (
+                    <CreateSiblingProjectButton
+                      projectId={id}
+                      projectName={project.name}
+                      currentFamilyId={family?.id ?? (project.family_id as string | null) ?? null}
+                      currentFamilyName={family?.name ?? null}
+                    />
+                  )}
                   <ProjectStatusActions projectId={id} currentStatus={project.status} />
                   <DeleteProjectButton projectId={id} projectName={project.name} />
                 </div>
