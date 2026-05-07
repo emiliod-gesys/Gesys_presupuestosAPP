@@ -87,6 +87,20 @@ export interface ProjectInvitation {
   invitee?: Profile
 }
 
+export interface ProjectReservation {
+  id: string
+  project_id: string
+  category_id: string
+  title: string
+  details: string | null
+  reserved_amount: number
+  created_by: string
+  created_at: string
+  updated_at: string
+  category?: BudgetCategory
+  creator?: Profile
+}
+
 export interface BudgetCategory {
   id: string
   project_id: string
@@ -122,6 +136,7 @@ export interface Transaction {
   id: string
   project_id: string
   category_id: string | null
+  reservation_id: string | null
   transaction_type_id: string
   description: string
   amount: number

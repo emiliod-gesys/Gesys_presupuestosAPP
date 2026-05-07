@@ -45,11 +45,12 @@ export default async function TransactionsPage({
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect("/login")
 
-  const [{ data: membership }, { data: categories }, { data: txTypes }, { data: projectRow }] = await Promise.all([
+  const [{ data: membership }, { data: categories }, { data: txTypes }, { data: projectRow }, { data: reservations }] = await Promise.all([
     supabase.from("project_members").select("role").eq("project_id", id).eq("user_id", user.id).single(),
     supabase.from("budget_categories").select("id, name, parent_id").eq("project_id", id).order("order_index"),
     supabase.from("transaction_types").select("*"),
     supabase.from("projects").select("currency, status").eq("id", id).single(),
+    supabase.from("project_reservations").select("id, title").eq("project_id", id).order("created_at", { ascending: false }),
   ])
 
   if (!membership) redirect("/dashboard")
@@ -68,6 +69,8 @@ export default async function TransactionsPage({
   })
 
   const expenseTypeIds = (txTypes || []).filter((t) => t.type === "expense").map((t) => t.id)
+  const reservationOptions = (reservations || []).map((r) => ({ value: r.id as string, label: r.title as string }))
+  const reservationById = new Map((reservations || []).map((r) => [r.id as string, r.title as string]))
 
   const typeById = new Map((txTypes || []).map((t) => [t.id, { name: t.name, type: t.type as string }]))
 
@@ -96,7 +99,7 @@ export default async function TransactionsPage({
   let listQuery = supabase
     .from("transactions")
     .select(
-      "id, description, amount, date, reference_number, vendor, notes, attachment_url, created_by, created_at, updated_at, category_id, transaction_type_id"
+      "id, description, amount, date, reference_number, vendor, notes, attachment_url, created_by, created_at, updated_at, category_id, reservation_id, transaction_type_id"
     )
     .eq("project_id", id)
     .order("date", { ascending: false })
@@ -201,6 +204,7 @@ export default async function TransactionsPage({
                 className="shrink-0"
                 projectId={id}
                 categories={categoryOptions}
+                reservationOptions={reservationOptions}
                 readOnly={readOnly}
                 txTypes={(txTypes || [])
                   .filter((t) => t.type === "expense")
@@ -228,6 +232,7 @@ export default async function TransactionsPage({
                 const categoryName = tx.category_id
                   ? (catById.get(tx.category_id) as { name?: string } | undefined)?.name
                   : undefined
+                const reservationName = tx.reservation_id ? reservationById.get(tx.reservation_id) : undefined
                 const vendor = (tx as { vendor?: string | null }).vendor
                 const attachmentUrl = (tx as { attachment_url?: string | null }).attachment_url
                 const createdAt = String((tx as { created_at?: string }).created_at ?? "")
@@ -266,6 +271,11 @@ export default async function TransactionsPage({
                           <span>{formatDate(tx.date)}</span>
                           {categoryName && (
                             <span className="rounded bg-gray-100 px-1.5 py-0.5">{categoryName}</span>
+                          )}
+                          {reservationName && (
+                            <span className="rounded bg-indigo-50 px-1.5 py-0.5 text-indigo-700">
+                              Reserva: {reservationName}
+                            </span>
                           )}
                           {tx.reference_number && <span>Ref: {tx.reference_number}</span>}
                           {vendor && <span>Prov.: {vendor}</span>}

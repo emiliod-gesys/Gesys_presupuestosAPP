@@ -16,12 +16,24 @@ interface Props {
   projectId: string
   categories: { value: string; label: string }[]
   txTypes: { value: string; label: string; type: string }[]
+  reservationOptions?: { value: string; label: string }[]
+  initialReservationId?: string
+  buttonLabel?: string
   className?: string
   /** Proyecto archivado: no permitir registrar movimientos */
   readOnly?: boolean
 }
 
-export function AddTransactionButton({ projectId, categories, txTypes, className, readOnly }: Props) {
+export function AddTransactionButton({
+  projectId,
+  categories,
+  txTypes,
+  reservationOptions = [],
+  initialReservationId,
+  buttonLabel = "Nueva transacción",
+  className,
+  readOnly,
+}: Props) {
   const router = useRouter()
   const { toast } = useToast()
   const [open, setOpen] = useState(false)
@@ -32,6 +44,7 @@ export function AddTransactionButton({ projectId, categories, txTypes, className
     date: new Date().toISOString().split("T")[0],
     transaction_type_id: "",
     category_id: "",
+    reservation_id: initialReservationId ?? "",
     reference_number: "",
     vendor: "",
     notes: "",
@@ -48,6 +61,20 @@ export function AddTransactionButton({ projectId, categories, txTypes, className
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
+    if (form.reservation_id) {
+      const { data: reservationOk } = await supabase
+        .from("project_reservations")
+        .select("id")
+        .eq("id", form.reservation_id)
+        .eq("project_id", projectId)
+        .maybeSingle()
+      if (!reservationOk) {
+        toast("error", "La reserva seleccionada no pertenece a este proyecto")
+        setLoading(false)
+        return
+      }
+    }
+
     const { error } = await supabase.from("transactions").insert({
       project_id: projectId,
       description: form.description,
@@ -55,6 +82,7 @@ export function AddTransactionButton({ projectId, categories, txTypes, className
       date: form.date,
       transaction_type_id: form.transaction_type_id,
       category_id: form.category_id || null,
+      reservation_id: form.reservation_id || null,
       reference_number: form.reference_number || null,
       vendor: form.vendor.trim() || null,
       attachment_url: null,
@@ -73,6 +101,7 @@ export function AddTransactionButton({ projectId, categories, txTypes, className
         date: new Date().toISOString().split("T")[0],
         transaction_type_id: "",
         category_id: "",
+        reservation_id: initialReservationId ?? "",
         reference_number: "",
         vendor: "",
         notes: "",
@@ -85,7 +114,7 @@ export function AddTransactionButton({ projectId, categories, txTypes, className
   if (readOnly) {
     return (
       <Button size="sm" variant="outline" className={cn("w-full cursor-not-allowed opacity-60 sm:w-auto", className)} disabled type="button" title="Proyecto archivado">
-        <Plus className="h-3.5 w-3.5" /> Solo consulta
+        <Plus className="h-3.5 w-3.5" /> {buttonLabel === "Nueva transacción" ? "Solo consulta" : buttonLabel}
       </Button>
     )
   }
@@ -93,7 +122,7 @@ export function AddTransactionButton({ projectId, categories, txTypes, className
   return (
     <>
       <Button size="sm" className={cn("w-full sm:w-auto", className)} onClick={() => setOpen(true)}>
-        <Plus className="h-3.5 w-3.5" /> Nueva transacción
+        <Plus className="h-3.5 w-3.5" /> {buttonLabel}
       </Button>
 
       <Modal open={open} onClose={() => setOpen(false)} title="Registrar transacción" size="lg">
@@ -141,6 +170,14 @@ export function AddTransactionButton({ projectId, categories, txTypes, className
               onChange={(e) => setForm({ ...form, category_id: e.target.value })}
             />
           </div>
+          {reservationOptions.length > 0 && (
+            <Select
+              label="Reserva asociada"
+              options={[{ value: "", label: "Sin reserva" }, ...reservationOptions]}
+              value={form.reservation_id}
+              onChange={(e) => setForm({ ...form, reservation_id: e.target.value })}
+            />
+          )}
           <Input
             label="Número de referencia"
             placeholder="Ej: FAC-001"

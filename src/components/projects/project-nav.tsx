@@ -19,6 +19,7 @@ export function ProjectNav({ projectId, role, projectName }: ProjectNavProps) {
   const tabs = [
     { href: base, label: "Resumen" },
     { href: `${base}/budget`, label: "Presupuesto" },
+    { href: `${base}/reservations`, label: "Reservas" },
     { href: `${base}/transactions`, label: "Transacciones" },
     { href: `${base}/members`, label: "Miembros" },
     ...(role === "admin" ? [

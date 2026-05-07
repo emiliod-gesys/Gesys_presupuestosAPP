@@ -110,10 +110,23 @@ create table if not exists transaction_types (
   description text
 );
 
+create table if not exists project_reservations (
+  id uuid default gen_random_uuid() primary key,
+  project_id uuid references projects(id) on delete cascade not null,
+  category_id uuid references budget_categories(id) not null,
+  title text not null,
+  details text,
+  reserved_amount numeric(15,2) not null,
+  created_by uuid references profiles(id) not null,
+  created_at timestamptz default now() not null,
+  updated_at timestamptz default now() not null
+);
+
 create table if not exists transactions (
   id uuid default gen_random_uuid() primary key,
   project_id uuid references projects(id) on delete cascade not null,
   category_id uuid references budget_categories(id),
+  reservation_id uuid references project_reservations(id) on delete set null,
   transaction_type_id uuid references transaction_types(id) not null,
   description text not null,
   amount numeric(15,2) not null,
@@ -280,6 +293,7 @@ alter table project_invitations enable row level security;
 alter table budget_categories enable row level security;
 alter table budget_alerts enable row level security;
 alter table transaction_types enable row level security;
+alter table project_reservations enable row level security;
 alter table transactions enable row level security;
 alter table transaction_comments enable row level security;
 alter table project_logs enable row level security;
@@ -545,6 +559,54 @@ create policy "budget_alerts_delete" on budget_alerts
 -- TRANSACTION TYPES
 create policy "transaction_types_select" on transaction_types
   for select to authenticated using (true);
+
+-- PROJECT RESERVATIONS
+create policy "project_reservations_select" on project_reservations
+  for select to authenticated
+  using (
+    exists (
+      select 1 from project_members pm
+      where pm.project_id = project_reservations.project_id
+        and pm.user_id = auth.uid()
+    )
+  );
+
+create policy "project_reservations_insert" on project_reservations
+  for insert to authenticated
+  with check (
+    public.project_editable_by_id(project_reservations.project_id)
+    and auth.uid() = created_by
+    and exists (
+      select 1 from project_members pm
+      where pm.project_id = project_reservations.project_id
+        and pm.user_id = auth.uid()
+        and pm.role in ('admin', 'worker')
+    )
+  );
+
+create policy "project_reservations_update" on project_reservations
+  for update to authenticated
+  using (
+    public.project_editable_by_id(project_reservations.project_id)
+    and exists (
+      select 1 from project_members pm
+      where pm.project_id = project_reservations.project_id
+        and pm.user_id = auth.uid()
+        and pm.role in ('admin', 'worker')
+    )
+  );
+
+create policy "project_reservations_delete" on project_reservations
+  for delete to authenticated
+  using (
+    public.project_editable_by_id(project_reservations.project_id)
+    and exists (
+      select 1 from project_members pm
+      where pm.project_id = project_reservations.project_id
+        and pm.user_id = auth.uid()
+        and pm.role in ('admin', 'worker')
+    )
+  );
 
 -- TRANSACTIONS
 create policy "transactions_select" on transactions
@@ -872,8 +934,10 @@ create trigger trg_projects_enforce_archived
 create index if not exists idx_projects_family_id      on projects(family_id);
 create index if not exists idx_project_members_user    on project_members(user_id);
 create index if not exists idx_project_members_project on project_members(project_id);
+create index if not exists idx_project_reservations_project on project_reservations(project_id);
 create index if not exists idx_transactions_project    on transactions(project_id);
 create index if not exists idx_transactions_category   on transactions(category_id);
+create index if not exists idx_transactions_reservation on transactions(reservation_id);
 create index if not exists idx_transaction_comments_tx   on transaction_comments(transaction_id);
 create index if not exists idx_notifications_user      on notifications(user_id, is_read);
 create index if not exists idx_project_logs_project    on project_logs(project_id);
