@@ -19,6 +19,7 @@ export default function ProfilePage() {
   const [pwLoading, setPwLoading] = useState(false)
   const [newPw, setNewPw] = useState("")
   const [confirmPw, setConfirmPw] = useState("")
+  const [odooUrl, setOdooUrl] = useState("")
   const [odooLogin, setOdooLogin] = useState("")
   const [odooPassword, setOdooPassword] = useState("")
   const [hasStoredOdooPassword, setHasStoredOdooPassword] = useState(false)
@@ -36,10 +37,11 @@ export default function ProfilePage() {
       }
       const { data: odoo } = await supabase
         .from("user_odoo_settings")
-        .select("odoo_login, odoo_password")
+        .select("odoo_url, odoo_login, odoo_password")
         .eq("user_id", user.id)
         .maybeSingle()
       if (odoo) {
+        setOdooUrl(odoo.odoo_url || "")
         setOdooLogin(odoo.odoo_login || "")
         setHasStoredOdooPassword(!!odoo.odoo_password)
       }
@@ -96,6 +98,8 @@ export default function ProfilePage() {
     const loginTrim = odooLogin.trim()
     const passTrim = odooPassword.trim()
 
+    const urlTrim = odooUrl.trim().replace(/\/+$/, "") || null
+
     const { data: existing } = await supabase
       .from("user_odoo_settings")
       .select("user_id")
@@ -105,7 +109,13 @@ export default function ProfilePage() {
     const updatedAt = new Date().toISOString()
 
     if (existing) {
-      const patch: { odoo_login: string | null; updated_at: string; odoo_password?: string } = {
+      const patch: {
+        odoo_url: string | null
+        odoo_login: string | null
+        updated_at: string
+        odoo_password?: string
+      } = {
+        odoo_url: urlTrim,
         odoo_login: loginTrim || null,
         updated_at: updatedAt,
       }
@@ -117,8 +127,14 @@ export default function ProfilePage() {
         toast("success", "Vinculación con Odoo guardada")
         if (passTrim) setHasStoredOdooPassword(true)
         setOdooPassword("")
+        setOdooUrl(urlTrim ?? "")
       }
     } else {
+      if (!urlTrim) {
+        toast("error", "Indica la URL de la base de datos Odoo")
+        setOdooLoading(false)
+        return
+      }
       if (!passTrim) {
         toast("error", "Indica la contraseña de Odoo la primera vez que guardas")
         setOdooLoading(false)
@@ -126,6 +142,7 @@ export default function ProfilePage() {
       }
       const { error } = await supabase.from("user_odoo_settings").insert({
         user_id: user.id,
+        odoo_url: urlTrim,
         odoo_login: loginTrim || null,
         odoo_password: passTrim,
         updated_at: updatedAt,
@@ -136,6 +153,7 @@ export default function ProfilePage() {
         toast("success", "Vinculación con Odoo guardada")
         setHasStoredOdooPassword(true)
         setOdooPassword("")
+        setOdooUrl(urlTrim ?? "")
       }
     }
     setOdooLoading(false)
@@ -203,10 +221,19 @@ export default function ProfilePage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-xs text-gray-500 leading-relaxed">
-            Usa el mismo correo y contraseña con los que inicias sesión en Odoo. Solo tú puedes ver estos datos;
-            guárdalos en un entorno de confianza y revisa las políticas de tu organización antes de almacenar
-            credenciales en la nube.
+            Indica la URL de tu base Odoo (por ejemplo la dirección con la que abres Odoo en el navegador), el correo y la
+            contraseña con los que inicias sesión. Solo tú puedes ver estos datos; guárdalos en un entorno de confianza y
+            revisa las políticas de tu organización antes de almacenar credenciales en la nube.
           </p>
+          <Input
+            label="URL de la base de datos"
+            type="url"
+            autoComplete="url"
+            value={odooUrl}
+            onChange={(e) => setOdooUrl(e.target.value)}
+            placeholder="https://tu-empresa.odoo.com"
+            helperText="Sin barra final; suele ser el mismo enlace que usas para entrar a Odoo."
+          />
           <Input
             label="Correo en Odoo"
             type="email"
