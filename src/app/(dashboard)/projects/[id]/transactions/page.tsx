@@ -25,6 +25,15 @@ function first(sp: Search, key: string): string {
   return v ?? ""
 }
 
+function normalizeTransactionType(raw: unknown): { type: string; name: string } | null {
+  if (!raw) return null
+  const row = Array.isArray(raw) ? raw[0] : raw
+  if (!row || typeof row !== "object") return null
+  const o = row as Record<string, unknown>
+  if (typeof o.name !== "string" || typeof o.type !== "string") return null
+  return { name: o.name, type: o.type }
+}
+
 export default async function TransactionsPage({
   params,
   searchParams,
@@ -224,7 +233,7 @@ export default async function TransactionsPage({
           ) : (
             <div className="divide-y divide-gray-50">
               {transactions.map((tx) => {
-                const txType = tx.transaction_type as { type: string; name: string } | null
+                const txType = normalizeTransactionType(tx.transaction_type)
                 const creator = creatorMap.get(tx.created_by) ?? null
                 const categoryName = tx.category_id
                   ? (catById.get(tx.category_id) as { name?: string } | undefined)?.name
