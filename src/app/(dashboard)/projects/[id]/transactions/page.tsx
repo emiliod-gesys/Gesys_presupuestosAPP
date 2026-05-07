@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Avatar } from "@/components/ui/avatar"
 import { formatCurrency, formatDate } from "@/lib/utils"
+import { resolveTransactionAttachmentUrl } from "@/lib/attachment-url"
 import { AddTransactionButton } from "@/components/projects/add-transaction-button"
 import { DeleteTransactionButton } from "@/components/projects/delete-transaction-button"
 import { TransactionFilters } from "@/components/projects/transaction-filters"
@@ -11,7 +12,6 @@ import { TRANSACTION_PAGE_SIZE } from "@/lib/transactions-pagination"
 import { TransactionCommentsPanel } from "@/components/projects/transaction-comments-panel"
 import { leafCategories } from "@/lib/budget-category-tree"
 import type { UserRole } from "@/lib/types"
-import Link from "next/link"
 import { ExternalLink } from "lucide-react"
 
 type Search = Record<string, string | string[] | undefined>
@@ -231,6 +231,7 @@ export default async function TransactionsPage({
                   : undefined
                 const vendor = (tx as { vendor?: string | null }).vendor
                 const attachmentUrl = (tx as { attachment_url?: string | null }).attachment_url
+                const attachmentHref = resolveTransactionAttachmentUrl(attachmentUrl)
                 const cc = commentCountByTx[tx.id] || 0
                 return (
                   <div
@@ -251,15 +252,15 @@ export default async function TransactionsPage({
                           )}
                           {tx.reference_number && <span>Ref: {tx.reference_number}</span>}
                           {vendor && <span>Prov.: {vendor}</span>}
-                          {attachmentUrl && (
-                            <Link
-                              href={attachmentUrl}
+                          {attachmentHref && (
+                            <a
+                              href={attachmentHref}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="inline-flex items-center gap-0.5 text-indigo-600 hover:underline"
                             >
                               Adjunto <ExternalLink className="h-3 w-3" />
-                            </Link>
+                            </a>
                           )}
                         </div>
                         <TransactionCommentsPanel

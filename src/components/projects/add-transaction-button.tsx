@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/components/ui/toast"
 import { Plus } from "lucide-react"
 import { cn, formatSupabaseError } from "@/lib/utils"
+import { resolveTransactionAttachmentUrl } from "@/lib/attachment-url"
 
 interface Props {
   projectId: string
@@ -58,7 +59,9 @@ export function AddTransactionButton({ projectId, categories, txTypes, className
       category_id: form.category_id || null,
       reference_number: form.reference_number || null,
       vendor: form.vendor.trim() || null,
-      attachment_url: form.attachment_url.trim() || null,
+      attachment_url: form.attachment_url.trim()
+        ? resolveTransactionAttachmentUrl(form.attachment_url.trim())
+        : null,
       notes: form.notes || null,
       created_by: user.id,
     })
@@ -157,7 +160,7 @@ export function AddTransactionButton({ projectId, categories, txTypes, className
           />
           <Input
             label="URL de adjunto (factura, Drive, etc.)"
-            placeholder="https://..."
+            placeholder="https://... (incluye https:// para enlaces externos)"
             value={form.attachment_url}
             onChange={(e) => setForm({ ...form, attachment_url: e.target.value })}
           />
