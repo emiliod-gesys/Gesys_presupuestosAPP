@@ -7,6 +7,10 @@ import { formatCurrency, formatDate } from "@/lib/utils"
 import { AddTransactionButton } from "@/components/projects/add-transaction-button"
 import { DeleteTransactionButton } from "@/components/projects/delete-transaction-button"
 import { TransactionFilters, TRANSACTION_PAGE_SIZE } from "@/components/projects/transaction-filters"
+
+function totalTransactionPages(totalCount: number) {
+  return Math.max(1, Math.ceil(totalCount / TRANSACTION_PAGE_SIZE))
+}
 import { TransactionCommentsPanel } from "@/components/projects/transaction-comments-panel"
 import { leafCategories } from "@/lib/budget-category-tree"
 import type { UserRole } from "@/lib/types"
@@ -78,12 +82,28 @@ export default async function TransactionsPage({
   const { count } = await countQuery
   const totalCount = count ?? 0
 
-  const fromIdx = (page - 1) * TRANSACTION_PAGE_SIZE
+  const totalPages = totalTransactionPages(totalCount)
+  const safePage = Math.min(Math.max(1, page), totalPages)
+  if (page !== safePage) {
+    const p = new URLSearchParams()
+    if (q) p.set("q", q)
+    if (from) p.set("from", from)
+    if (to) p.set("to", to)
+    if (category) p.set("category", category)
+    if (safePage > 1) p.set("page", String(safePage))
+    const qs = p.toString()
+    redirect(qs ? `/projects/${id}/transactions?${qs}` : `/projects/${id}/transactions`)
+  }
+  const fromIdx = (safePage - 1) * TRANSACTION_PAGE_SIZE
   const toIdx = fromIdx + TRANSACTION_PAGE_SIZE - 1
 
+  // Sin embeds a profiles/categorías: evita errores PostgREST (p. ej. relación ambigua) que dejan data=null
+  // mientras el conteo con head:true sigue funcionando.
   let listQuery = supabase
     .from("transactions")
-    .select("*, transaction_type:transaction_types(*), category:budget_categories(name), creator:profiles!created_by(full_name, email, avatar_url)")
+    .select(
+      "id, description, amount, date, reference_number, vendor, attachment_url, notes, created_by, category_id, transaction_type_id, transaction_type:transaction_types(name, type)"
+    )
     .eq("project_id", id)
     .order("date", { ascending: false })
     .order("created_at", { ascending: false })
@@ -94,7 +114,26 @@ export default async function TransactionsPage({
   if (q) listQuery = listQuery.ilike("description", `%${q}%`)
   if (expenseTypeIds.length > 0) listQuery = listQuery.in("transaction_type_id", expenseTypeIds)
 
-  const { data: transactions } = await listQuery.range(fromIdx, toIdx)
+  const { data: transactions, error: listErr } = await listQuery.range(fromIdx, toIdx)
+  if (listErr) {
+    console.error("[transactions] list query", listErr.message, listErr)
+  }
+
+  const creatorIds = [...new Set((transactions || []).map((t) => t.created_by).filter(Boolean))]
+  const creatorMap = new Map<string, { full_name: string | null; email: string; avatar_url: string | null }>()
+  if (creatorIds.length > 0) {
+    const { data: profs } = await supabase
+      .from("profiles")
+      .select("id, full_name, email, avatar_url")
+      .in("id", creatorIds)
+    for (const p of profs || []) {
+      creatorMap.set(p.id, {
+        full_name: p.full_name,
+        email: p.email,
+        avatar_url: p.avatar_url,
+      })
+    }
+  }
 
   let totalsQuery = supabase
     .from("transactions")
@@ -148,7 +187,7 @@ export default async function TransactionsPage({
         projectId={id}
         categoryOptions={categoryOptions}
         initial={{ q, from, to, category }}
-        page={page}
+        page={safePage}
         totalCount={totalCount}
       />
 
@@ -186,7 +225,10 @@ export default async function TransactionsPage({
             <div className="divide-y divide-gray-50">
               {transactions.map((tx) => {
                 const txType = tx.transaction_type as { type: string; name: string } | null
-                const creator = tx.creator as { full_name?: string; email: string; avatar_url?: string } | null
+                const creator = creatorMap.get(tx.created_by) ?? null
+                const categoryName = tx.category_id
+                  ? (catById.get(tx.category_id) as { name?: string } | undefined)?.name
+                  : undefined
                 const vendor = (tx as { vendor?: string | null }).vendor
                 const attachmentUrl = (tx as { attachment_url?: string | null }).attachment_url
                 const cc = commentCountByTx[tx.id] || 0
@@ -204,10 +246,8 @@ export default async function TransactionsPage({
                         </div>
                         <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
                           <span>{formatDate(tx.date)}</span>
-                          {(tx.category as { name?: string } | null)?.name && (
-                            <span className="rounded bg-gray-100 px-1.5 py-0.5">
-                              {(tx.category as { name: string }).name}
-                            </span>
+                          {categoryName && (
+                            <span className="rounded bg-gray-100 px-1.5 py-0.5">{categoryName}</span>
                           )}
                           {tx.reference_number && <span>Ref: {tx.reference_number}</span>}
                           {vendor && <span>Prov.: {vendor}</span>}
