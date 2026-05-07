@@ -9,16 +9,27 @@ export type ReservationBudgetRow = {
   reserved_amount: number | string
 }
 
+/** PostgREST puede devolver el embed como objeto o como array de un elemento. */
 type TxForReservation = {
   reservation_id?: string | null
   amount: number | string
-  transaction_type?: { type: string } | null
+  transaction_type?: { type: string } | { type: string }[] | null
+}
+
+function transactionTypeFromEmbed(embed: TxForReservation["transaction_type"]): string | undefined {
+  if (embed == null) return undefined
+  if (Array.isArray(embed)) {
+    const first = embed[0]
+    return first && typeof first === "object" && "type" in first ? String(first.type) : undefined
+  }
+  if (typeof embed === "object" && "type" in embed) return String((embed as { type: string }).type)
+  return undefined
 }
 
 export function expenseSumByReservationIdFromTxRows(rows: TxForReservation[]): Record<string, number> {
   const out: Record<string, number> = {}
   for (const tx of rows) {
-    const type = (tx.transaction_type as { type?: string } | null | undefined)?.type
+    const type = transactionTypeFromEmbed(tx.transaction_type)
     if (type !== "expense" || !tx.reservation_id) continue
     const rid = tx.reservation_id
     out[rid] = (out[rid] || 0) + (Number(tx.amount) || 0)
