@@ -16,6 +16,7 @@ import { DuplicateProjectButton } from "@/components/projects/duplicate-project-
 import { CreateSiblingProjectButton } from "@/components/projects/create-sibling-project-button"
 import Link from "next/link"
 import { EditProjectInfoButton } from "@/components/projects/edit-project-info-button"
+import { DeleteProjectButton } from "@/components/projects/delete-project-button"
 import { BudgetCommittedBar } from "@/components/projects/budget-committed-bar"
 
 export default async function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
