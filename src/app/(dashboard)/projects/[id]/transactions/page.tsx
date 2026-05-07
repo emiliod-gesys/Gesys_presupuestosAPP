@@ -4,7 +4,6 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Avatar } from "@/components/ui/avatar"
 import { formatCurrency, formatDate } from "@/lib/utils"
-import { resolveTransactionAttachmentUrl } from "@/lib/attachment-url"
 import { AddTransactionButton } from "@/components/projects/add-transaction-button"
 import { DeleteTransactionButton } from "@/components/projects/delete-transaction-button"
 import { TransactionFilters } from "@/components/projects/transaction-filters"
@@ -12,7 +11,6 @@ import { TRANSACTION_PAGE_SIZE } from "@/lib/transactions-pagination"
 import { TransactionCommentsPanel } from "@/components/projects/transaction-comments-panel"
 import { leafCategories } from "@/lib/budget-category-tree"
 import type { UserRole } from "@/lib/types"
-import { ExternalLink } from "lucide-react"
 
 type Search = Record<string, string | string[] | undefined>
 
@@ -97,7 +95,7 @@ export default async function TransactionsPage({
   let listQuery = supabase
     .from("transactions")
     .select(
-      "id, description, amount, date, reference_number, vendor, attachment_url, notes, created_by, category_id, transaction_type_id"
+      "id, description, amount, date, reference_number, vendor, notes, created_by, category_id, transaction_type_id"
     )
     .eq("project_id", id)
     .order("date", { ascending: false })
@@ -230,8 +228,6 @@ export default async function TransactionsPage({
                   ? (catById.get(tx.category_id) as { name?: string } | undefined)?.name
                   : undefined
                 const vendor = (tx as { vendor?: string | null }).vendor
-                const attachmentUrl = (tx as { attachment_url?: string | null }).attachment_url
-                const attachmentHref = resolveTransactionAttachmentUrl(attachmentUrl)
                 const cc = commentCountByTx[tx.id] || 0
                 return (
                   <div
@@ -252,16 +248,6 @@ export default async function TransactionsPage({
                           )}
                           {tx.reference_number && <span>Ref: {tx.reference_number}</span>}
                           {vendor && <span>Prov.: {vendor}</span>}
-                          {attachmentHref && (
-                            <a
-                              href={attachmentHref}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-0.5 text-indigo-600 hover:underline"
-                            >
-                              Adjunto <ExternalLink className="h-3 w-3" />
-                            </a>
-                          )}
                         </div>
                         <TransactionCommentsPanel
                           transactionId={tx.id}
