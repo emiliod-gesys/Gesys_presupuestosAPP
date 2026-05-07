@@ -6,6 +6,7 @@ import { Avatar } from "@/components/ui/avatar"
 import { formatCurrency, formatDate } from "@/lib/utils"
 import { AddTransactionButton } from "@/components/projects/add-transaction-button"
 import { DeleteTransactionButton } from "@/components/projects/delete-transaction-button"
+import { TransactionDetailButton } from "@/components/projects/transaction-detail-button"
 import { TransactionFilters } from "@/components/projects/transaction-filters"
 import { TRANSACTION_PAGE_SIZE } from "@/lib/transactions-pagination"
 import { TransactionCommentsPanel } from "@/components/projects/transaction-comments-panel"
@@ -95,7 +96,7 @@ export default async function TransactionsPage({
   let listQuery = supabase
     .from("transactions")
     .select(
-      "id, description, amount, date, reference_number, vendor, notes, created_by, category_id, transaction_type_id"
+      "id, description, amount, date, reference_number, vendor, notes, attachment_url, created_by, created_at, updated_at, category_id, transaction_type_id"
     )
     .eq("project_id", id)
     .order("date", { ascending: false })
@@ -228,7 +229,27 @@ export default async function TransactionsPage({
                   ? (catById.get(tx.category_id) as { name?: string } | undefined)?.name
                   : undefined
                 const vendor = (tx as { vendor?: string | null }).vendor
+                const attachmentUrl = (tx as { attachment_url?: string | null }).attachment_url
+                const createdAt = String((tx as { created_at?: string }).created_at ?? "")
+                const updatedAt = String((tx as { updated_at?: string }).updated_at ?? "")
                 const cc = commentCountByTx[tx.id] || 0
+                const detail = {
+                  id: tx.id,
+                  description: tx.description,
+                  amount: Number(tx.amount) || 0,
+                  date: String(tx.date),
+                  reference_number: tx.reference_number ?? null,
+                  vendor: vendor ?? null,
+                  notes: tx.notes ?? null,
+                  attachment_url: attachmentUrl ?? null,
+                  created_at: createdAt,
+                  updated_at: updatedAt,
+                  typeName: txType?.name ?? "—",
+                  typeFlow: txType?.type ?? "",
+                  categoryName: categoryName ?? null,
+                  creatorName: creator?.full_name ?? null,
+                  creatorEmail: creator?.email ?? "",
+                }
                 return (
                   <div
                     key={tx.id}
@@ -248,6 +269,7 @@ export default async function TransactionsPage({
                           )}
                           {tx.reference_number && <span>Ref: {tx.reference_number}</span>}
                           {vendor && <span>Prov.: {vendor}</span>}
+                          <TransactionDetailButton currency={currency} detail={detail} />
                         </div>
                         <TransactionCommentsPanel
                           transactionId={tx.id}
