@@ -1,7 +1,8 @@
 import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
-import { formatCurrency, getBudgetStatus, budgetBarWidthPct, cn } from "@/lib/utils"
+import { formatCurrency, getBudgetStatus, cn } from "@/lib/utils"
+import { BudgetCommittedBar } from "@/components/projects/budget-committed-bar"
 import {
   expenseSumByReservationIdFromTxRows,
   pendingReservedByCategory,
@@ -28,7 +29,7 @@ function BudgetLineCard({
   const pending = Math.max(0, pendingByCategory[cat.id] || 0)
   const committed = spent + pending
   const available = Number(cat.budget_amount) - spent - pending
-  const { pct, bg, color } = getBudgetStatus(committed, cat.budget_amount)
+  const { pct, color } = getBudgetStatus(committed, cat.budget_amount)
   return (
     <div className="space-y-2.5 rounded-xl border border-gray-100 p-4">
       <div className="flex items-center justify-between">
@@ -41,9 +42,7 @@ function BudgetLineCard({
           <p className={`text-xs font-medium ${color}`}>{pct.toFixed(1)}% comprometido</p>
         </div>
       </div>
-      <div className="h-2.5 overflow-hidden rounded-full bg-gray-100">
-        <div className={`h-full rounded-full ${bg}`} style={{ width: `${budgetBarWidthPct(pct)}%` }} />
-      </div>
+      <BudgetCommittedBar spent={spent} pending={pending} budget={Number(cat.budget_amount) || 0} heightClass="h-2.5" />
       <div className="flex flex-wrap justify-between gap-x-3 gap-y-1 text-xs text-gray-500">
         <span className="font-medium text-red-500">Gastado: {formatCurrency(spent, currency)}</span>
         <span className="font-medium text-indigo-800/90">Reservado pend.: {formatCurrency(pending, currency)}</span>
@@ -93,7 +92,7 @@ export default async function BudgetPage({ params }: { params: Promise<{ id: str
   const readOnly = project.status === "archived"
   const spentForBar = Math.max(0, totalSpent)
   const committedTotal = spentForBar + totalPendingReserved
-  const { pct: totalPct, bg: totalBg, color: totalColor } = getBudgetStatus(committedTotal, project.total_budget)
+  const { pct: totalPct, color: totalColor } = getBudgetStatus(committedTotal, project.total_budget)
   const totalAvailable = Number(project.total_budget) - spentForBar - totalPendingReserved
 
   return (
@@ -140,8 +139,21 @@ export default async function BudgetPage({ params }: { params: Promise<{ id: str
               {totalPct.toFixed(1)}% comprometido
             </span>
           </div>
-          <div className="h-4 bg-gray-100 rounded-full overflow-hidden">
-            <div className={`h-full rounded-full transition-all ${totalBg}`} style={{ width: `${budgetBarWidthPct(totalPct)}%` }} />
+          <BudgetCommittedBar
+            spent={spentForBar}
+            pending={totalPendingReserved}
+            budget={Number(project.total_budget) || 0}
+            heightClass="h-4"
+          />
+          <div className="mt-2 flex flex-wrap gap-3 text-xs text-gray-500">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-2 w-2 shrink-0 rounded-sm bg-emerald-500" aria-hidden />
+              Ejecutado
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-2 w-2 shrink-0 rounded-sm bg-violet-600" aria-hidden />
+              Reservado pendiente
+            </span>
           </div>
           <div className="mt-3 flex flex-col gap-2 text-sm sm:flex-row sm:justify-between sm:gap-4">
             <div>

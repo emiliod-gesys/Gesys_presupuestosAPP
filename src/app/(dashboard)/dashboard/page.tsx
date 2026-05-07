@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Badge, StatusBadge, RoleBadge } from "@/components/ui/badge"
 import { Avatar } from "@/components/ui/avatar"
-import { formatCurrency, formatDate, getBudgetStatus, budgetBarWidthPct } from "@/lib/utils"
+import { formatCurrency, formatDate, getBudgetStatus } from "@/lib/utils"
+import { BudgetCommittedBar } from "@/components/projects/budget-committed-bar"
 import { expenseSumByReservationIdFromTxRows } from "@/lib/budget-reservations"
 import { NotificationActions } from "@/components/dashboard/notification-actions"
 import { InvitationActions } from "@/components/dashboard/invitation-actions"
@@ -192,7 +193,7 @@ export default async function DashboardPage() {
                 const spent = Math.max(0, spentByProject[project.id] || 0)
                 const pending = Math.max(0, pendingByProject[project.id] || 0)
                 const committed = spent + pending
-                const { pct, bg } = getBudgetStatus(committed, project.total_budget)
+                const { pct } = getBudgetStatus(committed, project.total_budget)
 
                 return (
                   <Link key={project.id} href={`/projects/${project.id}`}>
@@ -217,12 +218,12 @@ export default async function DashboardPage() {
                             <span>Compromiso (gasto + reserva)</span>
                             <span className="font-medium">{pct.toFixed(1)}%</span>
                           </div>
-                          <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                            <div
-                              className={`h-full rounded-full transition-all ${bg}`}
-                              style={{ width: `${budgetBarWidthPct(pct)}%` }}
-                            />
-                          </div>
+                          <BudgetCommittedBar
+                            spent={spent}
+                            pending={pending}
+                            budget={Number(project.total_budget) || 0}
+                            heightClass="h-2"
+                          />
                           <div className="flex flex-wrap justify-between gap-x-2 gap-y-1 text-xs">
                             <span className="text-gray-500">{formatCurrency(spent, project.currency)} gastado</span>
                             <span className="text-indigo-800/90">{formatCurrency(pending, project.currency)} reserv. pend.</span>

@@ -55,6 +55,30 @@ export function budgetBarWidthPct(pct: number) {
   return Math.min(pct, 100)
 }
 
+/**
+ * Anchos % para barra apilada: ejecutado (verde en UI) + reserva pendiente (morado).
+ * Si ejecutado + reserva superan el presupuesto, los tramos se reparten el 100 % del track en proporción.
+ */
+export function budgetCommittedStackWidths(spent: number, pending: number, budget: number) {
+  const b = Number(budget) || 0
+  if (b <= 0) return { spentWidth: 0, pendingWidth: 0 }
+  const s = Math.max(0, spent)
+  const p = Math.max(0, pending)
+  const spentPct = (s / b) * 100
+  const pendingPct = (p / b) * 100
+  const sum = spentPct + pendingPct
+  if (sum <= 0) return { spentWidth: 0, pendingWidth: 0 }
+  if (sum <= 100) {
+    return {
+      spentWidth: budgetBarWidthPct(spentPct),
+      pendingWidth: budgetBarWidthPct(pendingPct),
+    }
+  }
+  const spentWidth = (spentPct / sum) * 100
+  const pendingWidth = (pendingPct / sum) * 100
+  return { spentWidth, pendingWidth }
+}
+
 /** Texto legible para toasts / consola (PostgREST / Supabase). */
 export function formatSupabaseError(
   error: { message: string; details?: string | null; hint?: string | null; code?: string | null } | null | undefined,

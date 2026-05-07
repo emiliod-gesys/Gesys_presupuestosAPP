@@ -3,7 +3,7 @@ import { redirect } from "next/navigation"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { StatusBadge } from "@/components/ui/badge"
 import { Avatar } from "@/components/ui/avatar"
-import { formatCurrency, formatDate, getBudgetStatus, budgetBarWidthPct, cn } from "@/lib/utils"
+import { formatCurrency, formatDate, getBudgetStatus, cn } from "@/lib/utils"
 import {
   expenseSumByReservationIdFromTxRows,
   pendingReservedByCategory,
@@ -16,7 +16,7 @@ import { DuplicateProjectButton } from "@/components/projects/duplicate-project-
 import { CreateSiblingProjectButton } from "@/components/projects/create-sibling-project-button"
 import Link from "next/link"
 import { EditProjectInfoButton } from "@/components/projects/edit-project-info-button"
-import { DeleteProjectButton } from "@/components/projects/delete-project-button"
+import { BudgetCommittedBar } from "@/components/projects/budget-committed-bar"
 
 export default async function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -67,7 +67,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
 
   const spentForBar = Math.max(0, totalSpent)
   const committedTotal = spentForBar + totalPendingReserved
-  const { pct: totalPct, bg: totalBg } = getBudgetStatus(committedTotal, project.total_budget)
+  const { pct: totalPct } = getBudgetStatus(committedTotal, project.total_budget)
   const totalAvailable = Number(project.total_budget) - spentForBar - totalPendingReserved
 
   const editInfoInitial = {
@@ -164,8 +164,22 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
                 <span className="text-gray-500">Comprometido (ejecutado + reserva pendiente)</span>
                 <span className="font-semibold">{totalPct.toFixed(1)}%</span>
               </div>
-              <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
-                <div className={`h-full rounded-full ${totalBg}`} style={{ width: `${budgetBarWidthPct(totalPct)}%` }} />
+              <BudgetCommittedBar
+                spent={spentForBar}
+                pending={totalPendingReserved}
+                budget={Number(project.total_budget) || 0}
+                heightClass="h-3"
+                trackClassName="bg-gray-200"
+              />
+              <div className="mt-2 flex flex-wrap gap-3 text-xs text-gray-500">
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="h-2 w-2 shrink-0 rounded-sm bg-emerald-500" aria-hidden />
+                  Ejecutado
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="h-2 w-2 shrink-0 rounded-sm bg-violet-600" aria-hidden />
+                  Reservado pendiente
+                </span>
               </div>
               <div className="mt-2 space-y-1 text-sm">
                 <div className="flex justify-between text-gray-600">
@@ -192,7 +206,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
                     const spent = Math.max(0, spentByCategory[cat.id] || 0)
                     const pend = Math.max(0, pendingByCategory[cat.id] || 0)
                     const committed = spent + pend
-                    const { pct, bg } = getBudgetStatus(committed, cat.budget_amount)
+                    const { pct } = getBudgetStatus(committed, cat.budget_amount)
                     return (
                       <div key={cat.id} className="pl-2 border-l-2 border-indigo-100">
                         <div className="mb-1 flex justify-between text-sm">
@@ -207,9 +221,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
                             </span>
                           </span>
                         </div>
-                        <div className="h-2 overflow-hidden rounded-full bg-gray-100">
-                          <div className={`h-full rounded-full ${bg}`} style={{ width: `${budgetBarWidthPct(pct)}%` }} />
-                        </div>
+                        <BudgetCommittedBar spent={spent} pending={pend} budget={Number(cat.budget_amount) || 0} heightClass="h-2" />
                       </div>
                     )
                   })}
@@ -220,7 +232,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
                   const spent = Math.max(0, spentByCategory[cat.id] || 0)
                   const pend = Math.max(0, pendingByCategory[cat.id] || 0)
                   const committed = spent + pend
-                  const { pct, bg } = getBudgetStatus(committed, cat.budget_amount)
+                  const { pct } = getBudgetStatus(committed, cat.budget_amount)
                   return (
                     <div key={cat.id}>
                       <div className="mb-1 flex justify-between text-sm">
@@ -235,9 +247,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
                           </span>
                         </span>
                       </div>
-                      <div className="h-2 overflow-hidden rounded-full bg-gray-100">
-                        <div className={`h-full rounded-full ${bg}`} style={{ width: `${budgetBarWidthPct(pct)}%` }} />
-                      </div>
+                      <BudgetCommittedBar spent={spent} pending={pend} budget={Number(cat.budget_amount) || 0} heightClass="h-2" />
                     </div>
                   )
                 })()
