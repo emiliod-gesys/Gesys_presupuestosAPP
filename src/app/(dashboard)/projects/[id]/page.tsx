@@ -4,6 +4,11 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { StatusBadge } from "@/components/ui/badge"
 import { Avatar } from "@/components/ui/avatar"
 import { formatCurrency, formatDate, getBudgetStatus, budgetBarWidthPct, cn } from "@/lib/utils"
+import {
+  expenseSumByReservationIdFromTxRows,
+  pendingReservedByCategory,
+  totalPendingReserved as computeTotalPendingReserved,
+} from "@/lib/budget-reservations"
 import { budgetCategorySections } from "@/lib/budget-category-tree"
 import { MapPin, Calendar, Users, Building2 } from "lucide-react"
 import { ProjectStatusActions } from "@/components/projects/project-status-actions"
@@ -19,7 +24,8 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect("/login")
 
-  const [{ data: project }, { data: membership }, { data: members }, { data: categories }] = await Promise.all([
+  const [{ data: project }, { data: membership }, { data: members }, { data: categories }, { data: reservations }] =
+    await Promise.all([
     supabase
       .from("projects")
       .select("*, creator:profiles!created_by(full_name, email, avatar_url), family:project_families(id, name)")
@@ -31,6 +37,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
       .select("role, user:profiles!user_id(full_name, email, avatar_url)")
       .eq("project_id", id),
     supabase.from("budget_categories").select("id, name, budget_amount, parent_id, order_index, description").eq("project_id", id).order("order_index"),
+    supabase.from("project_reservations").select("id, category_id, reserved_amount").eq("project_id", id),
   ])
 
   if (!project || !membership) redirect("/dashboard")
@@ -42,7 +49,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
   // Get spending per category
   const { data: txData } = await supabase
     .from("transactions")
-    .select("category_id, amount, transaction_type:transaction_types(type)")
+    .select("category_id, amount, reservation_id, transaction_type:transaction_types(type)")
     .eq("project_id", id)
 
   const spentByCategory: Record<string, number> = {}
@@ -53,9 +60,15 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
     return sum + delta
   }, 0)
 
+  const reservationRows = reservations || []
+  const expenseByReservationId = expenseSumByReservationIdFromTxRows(txData || [])
+  const pendingByCategory = pendingReservedByCategory(reservationRows, expenseByReservationId)
+  const totalPendingReserved = computeTotalPendingReserved(reservationRows, expenseByReservationId)
+
   const spentForBar = Math.max(0, totalSpent)
-  const { pct: totalPct, bg: totalBg } = getBudgetStatus(spentForBar, project.total_budget)
-  const totalAvailable = Number(project.total_budget) - spentForBar
+  const committedTotal = spentForBar + totalPendingReserved
+  const { pct: totalPct, bg: totalBg } = getBudgetStatus(committedTotal, project.total_budget)
+  const totalAvailable = Number(project.total_budget) - spentForBar - totalPendingReserved
 
   const editInfoInitial = {
     name: project.name ?? "",
@@ -148,15 +161,25 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
             {/* Total */}
             <div className="p-4 bg-gray-50 rounded-xl">
               <div className="flex justify-between text-sm mb-2">
-                <span className="text-gray-500">Total ejecutado</span>
+                <span className="text-gray-500">Comprometido (ejecutado + reserva pendiente)</span>
                 <span className="font-semibold">{totalPct.toFixed(1)}%</span>
               </div>
               <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
                 <div className={`h-full rounded-full ${totalBg}`} style={{ width: `${budgetBarWidthPct(totalPct)}%` }} />
               </div>
-              <div className="flex justify-between mt-2 text-sm">
-                <span className="text-gray-600">{formatCurrency(Math.max(0, totalSpent), project.currency)} gastado</span>
-                <span className="font-bold text-gray-900">{formatCurrency(project.total_budget, project.currency)} total</span>
+              <div className="mt-2 space-y-1 text-sm">
+                <div className="flex justify-between text-gray-600">
+                  <span>Ejecutado</span>
+                  <span>{formatCurrency(Math.max(0, totalSpent), project.currency)}</span>
+                </div>
+                <div className="flex justify-between text-indigo-800/90">
+                  <span>Reservado pendiente</span>
+                  <span>{formatCurrency(Math.max(0, totalPendingReserved), project.currency)}</span>
+                </div>
+                <div className="flex justify-between border-t border-gray-200 pt-2 font-bold text-gray-900">
+                  <span>Presupuesto total</span>
+                  <span>{formatCurrency(project.total_budget, project.currency)}</span>
+                </div>
               </div>
             </div>
 
@@ -167,14 +190,21 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
                   <p className="text-xs font-semibold uppercase tracking-wide text-indigo-700">{header.name}</p>
                   {children.map((cat) => {
                     const spent = Math.max(0, spentByCategory[cat.id] || 0)
-                    const { pct, bg } = getBudgetStatus(spent, cat.budget_amount)
+                    const pend = Math.max(0, pendingByCategory[cat.id] || 0)
+                    const committed = spent + pend
+                    const { pct, bg } = getBudgetStatus(committed, cat.budget_amount)
                     return (
                       <div key={cat.id} className="pl-2 border-l-2 border-indigo-100">
                         <div className="mb-1 flex justify-between text-sm">
                           <span className="font-medium text-gray-700">{cat.name}</span>
-                          <span className="text-gray-500">
-                            {formatCurrency(spent, project.currency)} / {formatCurrency(cat.budget_amount, project.currency)} ·{" "}
-                            {pct.toFixed(1)}%
+                          <span className="text-right text-gray-500">
+                            <span className="block">
+                              {formatCurrency(spent, project.currency)} ejec. · {formatCurrency(pend, project.currency)} res.
+                              pend.
+                            </span>
+                            <span className="block text-xs text-gray-400">
+                              de {formatCurrency(cat.budget_amount, project.currency)} · {pct.toFixed(1)}% comprometido
+                            </span>
                           </span>
                         </div>
                         <div className="h-2 overflow-hidden rounded-full bg-gray-100">
@@ -188,14 +218,21 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
                 (() => {
                   const cat = header
                   const spent = Math.max(0, spentByCategory[cat.id] || 0)
-                  const { pct, bg } = getBudgetStatus(spent, cat.budget_amount)
+                  const pend = Math.max(0, pendingByCategory[cat.id] || 0)
+                  const committed = spent + pend
+                  const { pct, bg } = getBudgetStatus(committed, cat.budget_amount)
                   return (
                     <div key={cat.id}>
                       <div className="mb-1 flex justify-between text-sm">
                         <span className="font-medium text-gray-700">{cat.name}</span>
-                        <span className="text-gray-500">
-                          {formatCurrency(spent, project.currency)} / {formatCurrency(cat.budget_amount, project.currency)} ·{" "}
-                          {pct.toFixed(1)}%
+                        <span className="text-right text-gray-500">
+                          <span className="block">
+                            {formatCurrency(spent, project.currency)} ejec. · {formatCurrency(pend, project.currency)} res.
+                            pend.
+                          </span>
+                          <span className="block text-xs text-gray-400">
+                            de {formatCurrency(cat.budget_amount, project.currency)} · {pct.toFixed(1)}% comprometido
+                          </span>
                         </span>
                       </div>
                       <div className="h-2 overflow-hidden rounded-full bg-gray-100">
@@ -255,6 +292,10 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
             <div className="flex justify-between text-sm">
               <span className="text-gray-500">Total gastado</span>
               <span className="font-semibold text-red-600">{formatCurrency(Math.max(0, totalSpent), project.currency)}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-500">Reservado pendiente</span>
+              <span className="font-semibold text-indigo-800">{formatCurrency(Math.max(0, totalPendingReserved), project.currency)}</span>
             </div>
             <div className="flex justify-between text-sm border-t pt-3">
               <span className="text-gray-500">Disponible</span>

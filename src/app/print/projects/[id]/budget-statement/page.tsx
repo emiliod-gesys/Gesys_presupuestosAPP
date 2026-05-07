@@ -3,6 +3,11 @@ import { redirect, notFound } from "next/navigation"
 import { formatCurrency, formatDate, cn } from "@/lib/utils"
 import { sumCategoryBudgets } from "@/lib/budget"
 import { budgetCategorySections } from "@/lib/budget-category-tree"
+import {
+  expenseSumByReservationIdFromTxRows,
+  pendingReservedByCategory,
+  totalPendingReserved as computeTotalPendingReserved,
+} from "@/lib/budget-reservations"
 import type { BudgetCategory } from "@/lib/types"
 import { PrintToolbar } from "@/components/projects/print-toolbar"
 
@@ -21,13 +26,14 @@ export default async function BudgetStatementPrintPage({ params }: { params: Pro
 
   if (!membership) redirect("/dashboard")
 
-  const [{ data: project }, { data: categories }, { data: txData }] = await Promise.all([
+  const [{ data: project }, { data: categories }, { data: txData }, { data: reservations }] = await Promise.all([
     supabase.from("projects").select("*").eq("id", id).single(),
     supabase.from("budget_categories").select("*").eq("project_id", id).order("order_index"),
     supabase
       .from("transactions")
-      .select("category_id, amount, transaction_type:transaction_types(type)")
+      .select("category_id, amount, reservation_id, transaction_type:transaction_types(type)")
       .eq("project_id", id),
+    supabase.from("project_reservations").select("id, category_id, reserved_amount").eq("project_id", id),
   ])
 
   if (!project) notFound()
@@ -41,10 +47,16 @@ export default async function BudgetStatementPrintPage({ params }: { params: Pro
     if (tx.category_id) spentByCategory[tx.category_id] = (spentByCategory[tx.category_id] || 0) + delta
   })
 
+  const reservationRows = reservations || []
+  const expenseByReservationId = expenseSumByReservationIdFromTxRows(txData || [])
+  const pendingByCategory = pendingReservedByCategory(reservationRows, expenseByReservationId)
+  const totalPendingReserved = computeTotalPendingReserved(reservationRows, expenseByReservationId)
+
   const sumLines = sumCategoryBudgets(categories || [])
   const generated = new Date().toLocaleString("es-GT", { dateStyle: "long", timeStyle: "short" })
   const spentForSummary = Math.max(0, totalSpent)
-  const totalAvailablePrint = Number(project.total_budget) - spentForSummary
+  const totalAvailablePrint =
+    Number(project.total_budget) - spentForSummary - totalPendingReserved
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-8 print:max-w-none print:px-8 print:py-6">
@@ -79,8 +91,12 @@ export default async function BudgetStatementPrintPage({ params }: { params: Pro
               <td className="py-2 pr-4 text-gray-600">Total ejecutado (gastos)</td>
               <td className="py-2 text-right font-semibold">{formatCurrency(spentForSummary, project.currency)}</td>
             </tr>
+            <tr className="border-b border-gray-100">
+              <td className="py-2 pr-4 text-gray-600">Reservado pendiente (cupo sin ejecutar en reservas)</td>
+              <td className="py-2 text-right font-semibold">{formatCurrency(totalPendingReserved, project.currency)}</td>
+            </tr>
             <tr>
-              <td className="py-2 pr-4 text-gray-600">Saldo disponible (presupuesto total − ejecutado)</td>
+              <td className="py-2 pr-4 text-gray-600">Saldo disponible (total − ejecutado − reserva pendiente)</td>
               <td
                 className={cn(
                   "py-2 text-right font-semibold",
@@ -103,14 +119,15 @@ export default async function BudgetStatementPrintPage({ params }: { params: Pro
                 <th className="px-3 py-2 font-semibold text-gray-800">Renglón</th>
                 <th className="px-3 py-2 text-right font-semibold text-gray-800">Presupuesto</th>
                 <th className="px-3 py-2 text-right font-semibold text-gray-800">Ejecutado</th>
+                <th className="px-3 py-2 text-right font-semibold text-gray-800">Reserv. pend.</th>
                 <th className="px-3 py-2 text-right font-semibold text-gray-800">Disponible</th>
-                <th className="px-3 py-2 text-right font-semibold text-gray-800">% uso</th>
+                <th className="px-3 py-2 text-right font-semibold text-gray-800">% comprom.</th>
               </tr>
             </thead>
             <tbody>
               {(categories || []).length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-3 py-6 text-center text-gray-500">
+                  <td colSpan={6} className="px-3 py-6 text-center text-gray-500">
                     Sin renglones definidos
                   </td>
                 </tr>
@@ -118,9 +135,10 @@ export default async function BudgetStatementPrintPage({ params }: { params: Pro
                 budgetCategorySections((categories || []) as BudgetCategory[]).flatMap(({ header, children }) => {
                   const lineRow = (cat: BudgetCategory, key: string) => {
                     const spent = Math.max(0, spentByCategory[cat.id] || 0)
+                    const pend = Math.max(0, pendingByCategory[cat.id] || 0)
                     const budget = Number(cat.budget_amount) || 0
-                    const avail = budget - spent
-                    const pct = budget > 0 ? (spent / budget) * 100 : 0
+                    const avail = budget - spent - pend
+                    const pct = budget > 0 ? ((spent + pend) / budget) * 100 : 0
                     return (
                       <tr key={key} className="border-b border-gray-100 last:border-0">
                         <td className="px-3 py-2">
@@ -129,6 +147,7 @@ export default async function BudgetStatementPrintPage({ params }: { params: Pro
                         </td>
                         <td className="px-3 py-2 text-right tabular-nums">{formatCurrency(budget, project.currency)}</td>
                         <td className="px-3 py-2 text-right tabular-nums text-red-700">{formatCurrency(spent, project.currency)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-indigo-900">{formatCurrency(pend, project.currency)}</td>
                         <td className={cn("px-3 py-2 text-right tabular-nums", avail < 0 ? "text-red-700" : "text-green-700")}>
                           {formatCurrency(avail, project.currency)}
                         </td>
@@ -139,7 +158,7 @@ export default async function BudgetStatementPrintPage({ params }: { params: Pro
                   if (children.length > 0) {
                     return [
                       <tr key={`sec-${header.id}`} className="border-b border-indigo-100 bg-indigo-50/60 print:bg-gray-100">
-                        <td colSpan={5} className="px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-indigo-950">
+                        <td colSpan={6} className="px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-indigo-950">
                           {header.name}
                         </td>
                       </tr>,

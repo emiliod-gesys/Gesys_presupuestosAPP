@@ -4,6 +4,11 @@ import { NextResponse } from "next/server"
 import * as XLSX from "xlsx"
 import { sumCategoryBudgets } from "@/lib/budget"
 import { budgetCategorySections } from "@/lib/budget-category-tree"
+import {
+  expenseSumByReservationIdFromTxRows,
+  pendingReservedByCategory,
+  totalPendingReserved as computeTotalPendingReserved,
+} from "@/lib/budget-reservations"
 import type { BudgetCategory } from "@/lib/types"
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -36,16 +41,22 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
   if (!membership) return new NextResponse("Prohibido", { status: 403 })
 
-  const [{ data: project }, { data: categories }, { data: txData }] = await Promise.all([
+  const [{ data: project }, { data: categories }, { data: txData }, { data: reservations }] = await Promise.all([
     supabase.from("projects").select("*").eq("id", id).single(),
     supabase.from("budget_categories").select("*").eq("project_id", id).order("order_index"),
     supabase
       .from("transactions")
-      .select("category_id, amount, transaction_type:transaction_types(type)")
+      .select("category_id, amount, reservation_id, transaction_type:transaction_types(type)")
       .eq("project_id", id),
+    supabase.from("project_reservations").select("id, category_id, reserved_amount").eq("project_id", id),
   ])
 
   if (!project) return new NextResponse("No encontrado", { status: 404 })
+
+  const reservationRows = reservations || []
+  const expenseByReservationId = expenseSumByReservationIdFromTxRows(txData || [])
+  const pendingByCategory = pendingReservedByCategory(reservationRows, expenseByReservationId)
+  const totalPendingReserved = computeTotalPendingReserved(reservationRows, expenseByReservationId)
 
   const spentByCategory: Record<string, number> = {}
   let totalSpent = 0
@@ -63,17 +74,19 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     ["Presupuesto total del proyecto", project.total_budget],
     ["Suma de renglones", sumLines],
     ["Total ejecutado", Math.max(0, totalSpent)],
-    ["Saldo disponible (total − ejecutado)", Number(project.total_budget) - Math.max(0, totalSpent)],
+    ["Reservado pendiente", totalPendingReserved],
+    ["Saldo disponible (total − ejecutado − reserva pendiente)", Number(project.total_budget) - Math.max(0, totalSpent) - totalPendingReserved],
     ["Moneda", project.currency],
   ]
 
   const renglonesRows = budgetCategorySections((categories || []) as BudgetCategory[]).flatMap(({ header, children }) => {
     const row = (displayName: string, cat: BudgetCategory) => {
       const spent = Math.max(0, spentByCategory[cat.id] || 0)
+      const pend = Math.max(0, pendingByCategory[cat.id] || 0)
       const budget = Number(cat.budget_amount) || 0
-      const avail = budget - spent
-      const pct = budget > 0 ? ((spent / budget) * 100).toFixed(1) : "0"
-      return [displayName, cat.description || "", budget, spent, avail, pct]
+      const avail = budget - spent - pend
+      const pct = budget > 0 ? (((spent + pend) / budget) * 100).toFixed(1) : "0"
+      return [displayName, cat.description || "", budget, spent, pend, avail, pct]
     }
     if (children.length > 0) {
       return children.map((cat) => row(`${header.name} › ${cat.name}`, cat))
@@ -81,7 +94,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     return [row(header.name, header)]
   })
 
-  const renglones = [["Renglón", "Descripción", "Presupuesto", "Ejecutado", "Disponible", "% uso"], ...renglonesRows]
+  const renglones = [["Renglón", "Descripción", "Presupuesto", "Ejecutado", "Reserv. pend.", "Disponible", "% comprom."], ...renglonesRows]
 
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(resumen), "Resumen")

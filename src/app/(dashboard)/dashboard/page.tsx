@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Badge, StatusBadge, RoleBadge } from "@/components/ui/badge"
 import { Avatar } from "@/components/ui/avatar"
 import { formatCurrency, formatDate, getBudgetStatus, budgetBarWidthPct } from "@/lib/utils"
+import { expenseSumByReservationIdFromTxRows } from "@/lib/budget-reservations"
 import { NotificationActions } from "@/components/dashboard/notification-actions"
 import { InvitationActions } from "@/components/dashboard/invitation-actions"
 
@@ -71,6 +72,28 @@ export default async function DashboardPage() {
     }
   }
 
+  let pendingByProject: Record<string, number> = {}
+  if (projectIds.length > 0) {
+    const { data: allReservations } = await supabase
+      .from("project_reservations")
+      .select("project_id, id, reserved_amount")
+      .in("project_id", projectIds)
+
+    const { data: rtx } = await supabase
+      .from("transactions")
+      .select("reservation_id, amount, transaction_type:transaction_types(type)")
+      .in("project_id", projectIds)
+      .not("reservation_id", "is", null)
+
+    const expenseByRes = expenseSumByReservationIdFromTxRows(rtx || [])
+    for (const r of allReservations || []) {
+      const pid = r.project_id as string
+      const reserved = Number(r.reserved_amount) || 0
+      const s = expenseByRes[r.id as string] || 0
+      pendingByProject[pid] = (pendingByProject[pid] || 0) + Math.max(0, reserved - s)
+    }
+  }
+
   return (
     <div className="mx-auto max-w-7xl space-y-6 animate-in sm:space-y-8">
       {/* Header */}
@@ -90,6 +113,7 @@ export default async function DashboardPage() {
       {memberships && memberships.length > 0 ? (() => {
         let totalBudgetSum = 0
         let totalSpentSum = 0
+        let totalPendingSum = 0
         let atRiskCount = 0
         const currencies = new Set<string>()
         for (const m of memberships) {
@@ -97,13 +121,15 @@ export default async function DashboardPage() {
           const b = Number(p.total_budget) || 0
           totalBudgetSum += b
           const spent = Math.max(0, spentByProject[p.id] || 0)
+          const pending = Math.max(0, pendingByProject[p.id] || 0)
           totalSpentSum += spent
+          totalPendingSum += pending
           currencies.add(p.currency || "GTQ")
-          const pct = b > 0 ? (spent / b) * 100 : 0
+          const pct = b > 0 ? ((spent + pending) / b) * 100 : 0
           if (pct >= 75) atRiskCount++
         }
         const mixedCurrency = currencies.size > 1
-        const globalPct = totalBudgetSum > 0 ? (totalSpentSum / totalBudgetSum) * 100 : 0
+        const globalPct = totalBudgetSum > 0 ? ((totalSpentSum + totalPendingSum) / totalBudgetSum) * 100 : 0
         return (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <Card>
@@ -115,12 +141,12 @@ export default async function DashboardPage() {
             </Card>
             <Card>
               <CardContent className="py-4">
-                <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Ejecución global</p>
+                <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Compromiso global</p>
                 <p className="mt-1 text-2xl font-bold text-gray-900">{globalPct.toFixed(0)}%</p>
                 <p className="text-xs text-gray-500">
                   {mixedCurrency
-                    ? "Suma de montos (varias monedas mezcladas; referencia aproximada)."
-                    : "Sobre la suma de presupuestos de proyecto."}
+                    ? "Gasto + reserva pendiente sobre presupuesto (varias monedas; referencia aproximada)."
+                    : "Gasto ejecutado más reservas pendientes, sobre la suma de presupuestos."}
                 </p>
               </CardContent>
             </Card>
@@ -128,7 +154,7 @@ export default async function DashboardPage() {
               <CardContent className="py-4">
                 <p className="text-xs font-medium uppercase tracking-wide text-gray-500">Seguimiento</p>
                 <p className="mt-1 text-2xl font-bold text-amber-700">{atRiskCount}</p>
-                <p className="text-xs text-gray-500">proyectos con ejecución ≥ 75%</p>
+                <p className="text-xs text-gray-500">proyectos con compromiso ≥ 75%</p>
               </CardContent>
             </Card>
           </div>
@@ -164,7 +190,9 @@ export default async function DashboardPage() {
                   total_budget: number; currency: string; start_date?: string; end_date?: string
                 }
                 const spent = Math.max(0, spentByProject[project.id] || 0)
-                const { pct, bg } = getBudgetStatus(spent, project.total_budget)
+                const pending = Math.max(0, pendingByProject[project.id] || 0)
+                const committed = spent + pending
+                const { pct, bg } = getBudgetStatus(committed, project.total_budget)
 
                 return (
                   <Link key={project.id} href={`/projects/${project.id}`}>
@@ -186,7 +214,7 @@ export default async function DashboardPage() {
                         {/* Budget bar */}
                         <div className="space-y-1.5">
                           <div className="flex justify-between text-xs text-gray-500">
-                            <span>Presupuesto ejecutado</span>
+                            <span>Compromiso (gasto + reserva)</span>
                             <span className="font-medium">{pct.toFixed(1)}%</span>
                           </div>
                           <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
@@ -195,9 +223,10 @@ export default async function DashboardPage() {
                               style={{ width: `${budgetBarWidthPct(pct)}%` }}
                             />
                           </div>
-                          <div className="flex justify-between text-xs">
+                          <div className="flex flex-wrap justify-between gap-x-2 gap-y-1 text-xs">
                             <span className="text-gray-500">{formatCurrency(spent, project.currency)} gastado</span>
-                            <span className="font-medium text-gray-700">{formatCurrency(project.total_budget, project.currency)}</span>
+                            <span className="text-indigo-800/90">{formatCurrency(pending, project.currency)} reserv. pend.</span>
+                            <span className="ml-auto font-medium text-gray-700">{formatCurrency(project.total_budget, project.currency)}</span>
                           </div>
                         </div>
 

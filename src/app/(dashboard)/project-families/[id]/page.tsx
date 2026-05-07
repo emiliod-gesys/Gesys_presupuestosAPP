@@ -6,6 +6,7 @@ import Link from "next/link"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { StatusBadge } from "@/components/ui/badge"
 import { formatCurrency, getBudgetStatus, cn } from "@/lib/utils"
+import { expenseSumByReservationIdFromTxRows } from "@/lib/budget-reservations"
 import { Network, ArrowLeft } from "lucide-react"
 
 type ProjectRow = {
@@ -51,6 +52,28 @@ export default async function ProjectFamilyComparePage({ params }: { params: Pro
     }
   }
 
+  let pendingByProject: Record<string, number> = {}
+  if (ids.length > 0) {
+    const { data: allReservations } = await supabase
+      .from("project_reservations")
+      .select("project_id, id, reserved_amount")
+      .in("project_id", ids)
+
+    const { data: rtx } = await supabase
+      .from("transactions")
+      .select("reservation_id, amount, transaction_type:transaction_types(type)")
+      .in("project_id", ids)
+      .not("reservation_id", "is", null)
+
+    const expenseByRes = expenseSumByReservationIdFromTxRows(rtx || [])
+    for (const r of allReservations || []) {
+      const pid = r.project_id as string
+      const reserved = Number(r.reserved_amount) || 0
+      const s = expenseByRes[r.id as string] || 0
+      pendingByProject[pid] = (pendingByProject[pid] || 0) + Math.max(0, reserved - s)
+    }
+  }
+
   return (
     <div className="mx-auto max-w-5xl space-y-6 animate-in">
       <div>
@@ -80,14 +103,17 @@ export default async function ProjectFamilyComparePage({ params }: { params: Pro
                 <th className="px-4 py-3">Estado</th>
                 <th className="px-4 py-3 text-right">Presupuesto</th>
                 <th className="px-4 py-3 text-right">Gastado</th>
-                <th className="px-4 py-3 text-right">% ejecución</th>
+                <th className="px-4 py-3 text-right">Reserv. pend.</th>
+                <th className="px-4 py-3 text-right">% compromiso</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {projects.map((p) => {
                 const budget = Number(p.total_budget) || 0
                 const spent = Math.max(0, spentByProject[p.id] || 0)
-                const { pct, bg, color } = getBudgetStatus(spent, budget)
+                const pending = Math.max(0, pendingByProject[p.id] || 0)
+                const committed = spent + pending
+                const { pct, bg, color } = getBudgetStatus(committed, budget)
                 return (
                   <tr key={p.id} className="hover:bg-gray-50/80">
                     <td className="px-4 py-3">
@@ -103,6 +129,9 @@ export default async function ProjectFamilyComparePage({ params }: { params: Pro
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums text-gray-700">
                       {formatCurrency(spent, p.currency || "GTQ")}
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums text-indigo-900">
+                      {formatCurrency(pending, p.currency || "GTQ")}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <span

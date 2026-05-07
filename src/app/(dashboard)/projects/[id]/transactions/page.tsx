@@ -4,6 +4,10 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Avatar } from "@/components/ui/avatar"
 import { formatCurrency, formatDate } from "@/lib/utils"
+import {
+  expenseSumByReservationIdFromTxRows,
+  totalPendingReserved as computeTotalPendingReserved,
+} from "@/lib/budget-reservations"
 import { AddTransactionButton } from "@/components/projects/add-transaction-button"
 import { DeleteTransactionButton } from "@/components/projects/delete-transaction-button"
 import { TransactionDetailButton } from "@/components/projects/transaction-detail-button"
@@ -50,7 +54,7 @@ export default async function TransactionsPage({
     supabase.from("budget_categories").select("id, name, parent_id").eq("project_id", id).order("order_index"),
     supabase.from("transaction_types").select("*"),
     supabase.from("projects").select("currency, status").eq("id", id).single(),
-    supabase.from("project_reservations").select("id, title").eq("project_id", id).order("created_at", { ascending: false }),
+    supabase.from("project_reservations").select("id, title, category_id, reserved_amount").eq("project_id", id).order("created_at", { ascending: false }),
   ])
 
   if (!membership) redirect("/dashboard")
@@ -69,10 +73,26 @@ export default async function TransactionsPage({
   })
 
   const expenseTypeIds = (txTypes || []).filter((t) => t.type === "expense").map((t) => t.id)
-  const reservationOptions = (reservations || []).map((r) => ({ value: r.id as string, label: r.title as string }))
-  const reservationById = new Map((reservations || []).map((r) => [r.id as string, r.title as string]))
+  const reservationRows = reservations || []
+  const reservationIds = reservationRows.map((r) => r.id as string)
 
-  const typeById = new Map((txTypes || []).map((t) => [t.id, { name: t.name, type: t.type as string }]))
+  let totalPendingReserved = 0
+  if (reservationIds.length > 0) {
+    const { data: rtx } = await supabase
+      .from("transactions")
+      .select("reservation_id, amount, transaction_type:transaction_types(type)")
+      .eq("project_id", id)
+      .in("reservation_id", reservationIds)
+
+    const expenseByRes = expenseSumByReservationIdFromTxRows(rtx || [])
+    totalPendingReserved = computeTotalPendingReserved(
+      reservationRows as { id: string; category_id: string; reserved_amount: number }[],
+      expenseByRes
+    )
+  }
+
+  const reservationOptions = reservationRows.map((r) => ({ value: r.id as string, label: r.title as string }))
+  const reservationById = new Map(reservationRows.map((r) => [r.id as string, r.title as string]))
 
   let countQuery = supabase
     .from("transactions")
@@ -169,7 +189,7 @@ export default async function TransactionsPage({
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
         <Card>
           <CardContent className="pt-5">
             <p className="mb-1 text-xs text-gray-500">Total gastos (proyecto)</p>
@@ -178,9 +198,16 @@ export default async function TransactionsPage({
         </Card>
         <Card>
           <CardContent className="pt-5">
+            <p className="mb-1 text-xs text-gray-500">Reservado pendiente</p>
+            <p className="text-xl font-bold text-indigo-900">{formatCurrency(Math.max(0, totalPendingReserved), currency)}</p>
+            <p className="mt-1 text-xs text-gray-400">Cupo de reservas aún no cubierto por gastos vinculados.</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-5">
             <p className="mb-1 text-xs text-gray-500">Movimientos registrados</p>
             <p className="text-xl font-bold text-gray-900">{txCount}</p>
-            <p className="mt-1 text-xs text-gray-400">Solo gastos; el presupuesto compara contra este total.</p>
+            <p className="mt-1 text-xs text-gray-400">Solo gastos; el disponible del presupuesto resta también las reservas.</p>
           </CardContent>
         </Card>
       </div>
