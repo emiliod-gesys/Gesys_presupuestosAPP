@@ -73,6 +73,7 @@ export default async function TransactionsPage({
   })
 
   const expenseTypeIds = (txTypes || []).filter((t) => t.type === "expense").map((t) => t.id)
+  const typeById = new Map((txTypes || []).map((t) => [t.id, { name: t.name, type: t.type as string }]))
   const reservationRows = reservations || []
   const reservationIds = reservationRows.map((r) => r.id as string)
 
