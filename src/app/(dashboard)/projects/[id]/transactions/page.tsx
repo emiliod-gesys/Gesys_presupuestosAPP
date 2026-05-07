@@ -7,10 +7,6 @@ import { formatCurrency, formatDate } from "@/lib/utils"
 import { AddTransactionButton } from "@/components/projects/add-transaction-button"
 import { DeleteTransactionButton } from "@/components/projects/delete-transaction-button"
 import { TransactionFilters, TRANSACTION_PAGE_SIZE } from "@/components/projects/transaction-filters"
-
-function totalTransactionPages(totalCount: number) {
-  return Math.max(1, Math.ceil(totalCount / TRANSACTION_PAGE_SIZE))
-}
 import { TransactionCommentsPanel } from "@/components/projects/transaction-comments-panel"
 import { leafCategories } from "@/lib/budget-category-tree"
 import type { UserRole } from "@/lib/types"
@@ -18,6 +14,10 @@ import Link from "next/link"
 import { ExternalLink } from "lucide-react"
 
 type Search = Record<string, string | string[] | undefined>
+
+function totalTransactionPages(totalCount: number) {
+  return Math.max(1, Math.ceil(totalCount / TRANSACTION_PAGE_SIZE))
+}
 
 function first(sp: Search, key: string): string {
   const v = sp[key]
@@ -92,17 +92,8 @@ export default async function TransactionsPage({
   const totalCount = count ?? 0
 
   const totalPages = totalTransactionPages(totalCount)
+  // No usar redirect() para acotar page: puede provocar bucles (ERR_TOO_MANY_REDIRECTS) con prefetch/RSC.
   const safePage = Math.min(Math.max(1, page), totalPages)
-  if (page !== safePage) {
-    const p = new URLSearchParams()
-    if (q) p.set("q", q)
-    if (from) p.set("from", from)
-    if (to) p.set("to", to)
-    if (category) p.set("category", category)
-    if (safePage > 1) p.set("page", String(safePage))
-    const qs = p.toString()
-    redirect(qs ? `/projects/${id}/transactions?${qs}` : `/projects/${id}/transactions`)
-  }
   const fromIdx = (safePage - 1) * TRANSACTION_PAGE_SIZE
   const toIdx = fromIdx + TRANSACTION_PAGE_SIZE - 1
 
