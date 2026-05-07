@@ -6,7 +6,8 @@ import { Avatar } from "@/components/ui/avatar"
 import { formatCurrency, formatDate } from "@/lib/utils"
 import { AddTransactionButton } from "@/components/projects/add-transaction-button"
 import { DeleteTransactionButton } from "@/components/projects/delete-transaction-button"
-import { TransactionFilters, TRANSACTION_PAGE_SIZE } from "@/components/projects/transaction-filters"
+import { TransactionFilters } from "@/components/projects/transaction-filters"
+import { TRANSACTION_PAGE_SIZE } from "@/lib/transactions-pagination"
 import { TransactionCommentsPanel } from "@/components/projects/transaction-comments-panel"
 import { leafCategories } from "@/lib/budget-category-tree"
 import type { UserRole } from "@/lib/types"
@@ -16,22 +17,14 @@ import { ExternalLink } from "lucide-react"
 type Search = Record<string, string | string[] | undefined>
 
 function totalTransactionPages(totalCount: number) {
-  return Math.max(1, Math.ceil(totalCount / TRANSACTION_PAGE_SIZE))
+  const n = Number.isFinite(totalCount) ? totalCount : Number(totalCount) || 0
+  return Math.max(1, Math.ceil(n / TRANSACTION_PAGE_SIZE))
 }
 
 function first(sp: Search, key: string): string {
   const v = sp[key]
   if (Array.isArray(v)) return v[0] ?? ""
   return v ?? ""
-}
-
-function normalizeTransactionType(raw: unknown): { type: string; name: string } | null {
-  if (!raw) return null
-  const row = Array.isArray(raw) ? raw[0] : raw
-  if (!row || typeof row !== "object") return null
-  const o = row as Record<string, unknown>
-  if (typeof o.name !== "string" || typeof o.type !== "string") return null
-  return { name: o.name, type: o.type }
 }
 
 export default async function TransactionsPage({
@@ -77,6 +70,8 @@ export default async function TransactionsPage({
 
   const expenseTypeIds = (txTypes || []).filter((t) => t.type === "expense").map((t) => t.id)
 
+  const typeById = new Map((txTypes || []).map((t) => [t.id, { name: t.name, type: t.type as string }]))
+
   let countQuery = supabase
     .from("transactions")
     .select("*", { count: "exact", head: true })
@@ -89,20 +84,20 @@ export default async function TransactionsPage({
   if (expenseTypeIds.length > 0) countQuery = countQuery.in("transaction_type_id", expenseTypeIds)
 
   const { count } = await countQuery
-  const totalCount = count ?? 0
+  const totalCount = typeof count === "number" && Number.isFinite(count) ? count : Number(count) || 0
 
   const totalPages = totalTransactionPages(totalCount)
   // No usar redirect() para acotar page: puede provocar bucles (ERR_TOO_MANY_REDIRECTS) con prefetch/RSC.
-  const safePage = Math.min(Math.max(1, page), totalPages)
+  const rawPage = Number.isFinite(page) ? page : 1
+  const safePage = Math.min(Math.max(1, rawPage), totalPages)
   const fromIdx = (safePage - 1) * TRANSACTION_PAGE_SIZE
   const toIdx = fromIdx + TRANSACTION_PAGE_SIZE - 1
 
-  // Sin embeds a profiles/categorías: evita errores PostgREST (p. ej. relación ambigua) que dejan data=null
-  // mientras el conteo con head:true sigue funcionando.
+  // Sin embed a transaction_types: evita fallos PostgREST; el nombre del tipo sale de typeById.
   let listQuery = supabase
     .from("transactions")
     .select(
-      "id, description, amount, date, reference_number, vendor, attachment_url, notes, created_by, category_id, transaction_type_id, transaction_type:transaction_types(name, type)"
+      "id, description, amount, date, reference_number, vendor, attachment_url, notes, created_by, category_id, transaction_type_id"
     )
     .eq("project_id", id)
     .order("date", { ascending: false })
@@ -114,12 +109,13 @@ export default async function TransactionsPage({
   if (q) listQuery = listQuery.ilike("description", `%${q}%`)
   if (expenseTypeIds.length > 0) listQuery = listQuery.in("transaction_type_id", expenseTypeIds)
 
-  const { data: transactions, error: listErr } = await listQuery.range(fromIdx, toIdx)
+  let { data: transactions, error: listErr } = await listQuery.range(fromIdx, toIdx)
   if (listErr) {
     console.error("[transactions] list query", listErr.message, listErr)
   }
+  transactions = transactions ?? []
 
-  const creatorIds = [...new Set((transactions || []).map((t) => t.created_by).filter(Boolean))]
+  const creatorIds = [...new Set(transactions.map((t) => t.created_by).filter(Boolean))]
   const creatorMap = new Map<string, { full_name: string | null; email: string; avatar_url: string | null }>()
   if (creatorIds.length > 0) {
     const { data: profs } = await supabase
@@ -137,7 +133,7 @@ export default async function TransactionsPage({
 
   let totalsQuery = supabase
     .from("transactions")
-    .select("amount, transaction_type:transaction_types(type)")
+    .select("amount, transaction_type_id")
     .eq("project_id", id)
   if (expenseTypeIds.length > 0) totalsQuery = totalsQuery.in("transaction_type_id", expenseTypeIds)
   const { data: allForTotals } = await totalsQuery
@@ -147,10 +143,14 @@ export default async function TransactionsPage({
   const canEdit = canMutate && !readOnly
   const isAdmin = role === "admin"
 
-  const totalExpense = (allForTotals || []).reduce((s, t) => s + Number(t.amount) || 0, 0)
-  const txCount = (allForTotals || []).length
+  const totalExpense = (allForTotals || []).reduce((s, t) => {
+    const meta = typeById.get(t.transaction_type_id)
+    if (meta?.type !== "expense") return s
+    return s + (Number(t.amount) || 0)
+  }, 0)
+  const txCount = (allForTotals || []).filter((t) => typeById.get(t.transaction_type_id)?.type === "expense").length
 
-  const txIds = (transactions || []).map((t) => t.id)
+  const txIds = transactions.map((t) => t.id)
   const commentCountByTx: Record<string, number> = {}
   if (txIds.length > 0) {
     const { data: ccRows, error: ccErr } = await supabase
@@ -211,7 +211,7 @@ export default async function TransactionsPage({
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          {!transactions?.length ? (
+          {!transactions.length ? (
             <div className="py-16 text-center text-gray-400">
               <p className="font-medium">Sin transacciones con estos criterios</p>
               {canEdit && totalCount === 0 && (
@@ -224,7 +224,7 @@ export default async function TransactionsPage({
           ) : (
             <div className="divide-y divide-gray-50">
               {transactions.map((tx) => {
-                const txType = normalizeTransactionType(tx.transaction_type)
+                const txType = typeById.get(tx.transaction_type_id) ?? null
                 const creator = creatorMap.get(tx.created_by) ?? null
                 const categoryName = tx.category_id
                   ? (catById.get(tx.category_id) as { name?: string } | undefined)?.name

@@ -5,8 +5,9 @@ import { useMemo, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select } from "@/components/ui/select"
+import { TRANSACTION_PAGE_SIZE } from "@/lib/transactions-pagination"
 
-export const TRANSACTION_PAGE_SIZE = 20
+export { TRANSACTION_PAGE_SIZE }
 
 interface Option {
   value: string
@@ -37,9 +38,11 @@ export function TransactionFilters({
   const [to, setTo] = useState(initial.to)
   const [category, setCategory] = useState(initial.category)
 
-  const totalPages = Math.max(1, Math.ceil(totalCount / TRANSACTION_PAGE_SIZE))
-  const hasPrev = page > 1
-  const hasNext = page < totalPages
+  const safeCount = Number.isFinite(totalCount) ? totalCount : Number(totalCount) || 0
+  const safePageNum = Number.isFinite(page) ? page : Math.max(1, parseInt(String(page), 10) || 1)
+  const totalPages = Math.max(1, Math.ceil(safeCount / TRANSACTION_PAGE_SIZE))
+  const hasPrev = safePageNum > 1
+  const hasNext = safePageNum < totalPages
 
   const buildUrl = (nextPage: number) => {
     const p = new URLSearchParams()
@@ -99,7 +102,7 @@ export function TransactionFilters({
       </div>
       <div className="flex flex-col gap-2 border-t border-gray-200 pt-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-xs text-gray-500">
-          {totalCount} transacción{totalCount === 1 ? "" : "es"} · Página {page} de {totalPages}
+          {safeCount} transacción{safeCount === 1 ? "" : "es"} · Página {safePageNum} de {totalPages}
         </p>
         <div className="flex flex-wrap gap-2">
           <a
@@ -108,10 +111,22 @@ export function TransactionFilters({
           >
             CSV (filtros aplicados en URL)
           </a>
-          <Button type="button" variant="outline" size="sm" disabled={!hasPrev} onClick={() => router.push(buildUrl(page - 1))}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={!hasPrev}
+            onClick={() => router.push(buildUrl(safePageNum - 1))}
+          >
             Anterior
           </Button>
-          <Button type="button" variant="outline" size="sm" disabled={!hasNext} onClick={() => router.push(buildUrl(page + 1))}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={!hasNext}
+            onClick={() => router.push(buildUrl(safePageNum + 1))}
+          >
             Siguiente
           </Button>
         </div>
