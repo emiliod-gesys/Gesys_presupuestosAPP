@@ -19,6 +19,8 @@ export interface UserOdooSettings {
   user_id: string
   odoo_url: string | null
   odoo_database: string | null
+  /** ID de res.company en Odoo para importaciones multiempresa */
+  odoo_company_id: number | null
   odoo_login: string | null
   odoo_password: string | null
   updated_at: string

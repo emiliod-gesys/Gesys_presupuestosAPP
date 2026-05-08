@@ -1,14 +1,15 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import Image from "next/image"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Select } from "@/components/ui/select"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Avatar } from "@/components/ui/avatar"
 import { useToast } from "@/components/ui/toast"
-import { Save, KeyRound } from "lucide-react"
+import { Save, KeyRound, RefreshCw } from "lucide-react"
 import type { Profile, UserOdooSettings } from "@/lib/types"
 
 export default function ProfilePage() {
@@ -25,6 +26,45 @@ export default function ProfilePage() {
   const [odooPassword, setOdooPassword] = useState("")
   const [hasStoredOdooPassword, setHasStoredOdooPassword] = useState(false)
   const [odooLoading, setOdooLoading] = useState(false)
+  const [odooCompanyId, setOdooCompanyId] = useState("")
+  const [odooCompanies, setOdooCompanies] = useState<{ id: number; name: string }[]>([])
+  const [odooCompaniesLoading, setOdooCompaniesLoading] = useState(false)
+
+  const fetchProfileOdooCompanies = useCallback(async (opts?: { announce?: boolean }) => {
+    setOdooCompaniesLoading(true)
+    try {
+      const res = await fetch("/api/odoo/companies", { method: "POST" })
+      const data = await res.json()
+      if (!res.ok) {
+        toast("error", data.message || "No se pudieron cargar las empresas de Odoo")
+        setOdooCompanies([])
+        return
+      }
+      const list = (data.companies || []) as { id: number; name: string }[]
+      setOdooCompanies(list)
+      if (opts?.announce) toast("success", `${list.length} empresa(s) desde Odoo`)
+      const supabase = createClient()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user) return
+      const { data: row } = await supabase
+        .from("user_odoo_settings")
+        .select("odoo_company_id")
+        .eq("user_id", user.id)
+        .maybeSingle()
+      if (list.length === 1 && row?.odoo_company_id == null) {
+        const only = list[0].id
+        const { error } = await supabase
+          .from("user_odoo_settings")
+          .update({ odoo_company_id: only, updated_at: new Date().toISOString() })
+          .eq("user_id", user.id)
+        if (!error) setOdooCompanyId(String(only))
+      }
+    } finally {
+      setOdooCompaniesLoading(false)
+    }
+  }, [toast])
 
   useEffect(() => {
     const load = async () => {
@@ -38,7 +78,7 @@ export default function ProfilePage() {
       }
       const { data: odoo } = await supabase
         .from("user_odoo_settings")
-        .select("odoo_url, odoo_database, odoo_login, odoo_password")
+        .select("odoo_url, odoo_database, odoo_login, odoo_password, odoo_company_id")
         .eq("user_id", user.id)
         .maybeSingle()
       if (odoo) {
@@ -47,10 +87,14 @@ export default function ProfilePage() {
         setOdooDatabase(o.odoo_database || "")
         setOdooLogin(o.odoo_login || "")
         setHasStoredOdooPassword(!!o.odoo_password)
+        setOdooCompanyId(o.odoo_company_id != null ? String(o.odoo_company_id) : "")
+        if (o.odoo_url?.trim() && o.odoo_login?.trim() && o.odoo_password) {
+          await fetchProfileOdooCompanies()
+        }
       }
     }
     load()
-  }, [])
+  }, [fetchProfileOdooCompanies])
 
   const saveProfile = async () => {
     if (!profile) return
@@ -134,6 +178,7 @@ export default function ProfilePage() {
         if (passTrim) setHasStoredOdooPassword(true)
         setOdooPassword("")
         setOdooUrl(urlTrim ?? "")
+        await fetchProfileOdooCompanies()
       }
     } else {
       if (!urlTrim) {
@@ -152,6 +197,7 @@ export default function ProfilePage() {
         odoo_database: dbTrim,
         odoo_login: loginTrim || null,
         odoo_password: passTrim,
+        odoo_company_id: null,
         updated_at: updatedAt,
       })
       if (error) {
@@ -161,10 +207,38 @@ export default function ProfilePage() {
         setHasStoredOdooPassword(true)
         setOdooPassword("")
         setOdooUrl(urlTrim ?? "")
+        await fetchProfileOdooCompanies()
       }
     }
     setOdooLoading(false)
   }
+
+  const persistProfileOdooCompany = async (next: string) => {
+    const supabase = createClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user) return
+    const n = next.trim() === "" ? NaN : Number(next)
+    const id = Number.isFinite(n) && n > 0 ? n : null
+    const { error } = await supabase
+      .from("user_odoo_settings")
+      .update({ odoo_company_id: id, updated_at: new Date().toISOString() })
+      .eq("user_id", user.id)
+    if (error) {
+      toast("error", "No se pudo guardar la empresa en el perfil")
+      return
+    }
+    setOdooCompanyId(id != null ? String(id) : "")
+    toast("success", "Empresa Odoo predeterminada guardada")
+  }
+
+  const odooCompanyOptions = [
+    { value: "", label: "Sin empresa predeterminada" },
+    ...odooCompanies.map((c) => ({ value: String(c.id), label: c.name })),
+  ]
+
+  const showOdooCompanyPicker = hasStoredOdooPassword && odooUrl.trim() !== "" && odooLogin.trim() !== ""
 
   if (!profile) {
     return (
@@ -272,6 +346,36 @@ export default function ProfilePage() {
           <Button onClick={saveOdooLink} loading={odooLoading} variant="outline" className="w-full border-[#875A7B]/40 text-[#5b4a5c] hover:bg-[#875A7B]/5">
             Guardar vinculación Odoo
           </Button>
+          {showOdooCompanyPicker && (
+            <div className="space-y-3 rounded-lg border border-gray-100 bg-gray-50/80 p-4">
+              <p className="text-xs font-medium text-gray-700">Empresa Odoo (multiempresa)</p>
+              <p className="text-xs text-gray-500">
+                Tras guardar credenciales se cargan las empresas de tu base. La predeterminada se usa en la pestaña Odoo
+                de tus proyectos; puedes actualizar el listado si creas empresas nuevas en Odoo.
+              </p>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                <div className="min-w-0 flex-1">
+                  <Select
+                    label="Empresa predeterminada"
+                    options={odooCompanyOptions}
+                    value={odooCompanyId}
+                    onChange={(e) => void persistProfileOdooCompany(e.target.value)}
+                    className="text-sm bg-white"
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  loading={odooCompaniesLoading}
+                  onClick={() => void fetchProfileOdooCompanies({ announce: true })}
+                  className="shrink-0"
+                >
+                  <RefreshCw className="h-4 w-4" /> Actualizar empresas
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 

@@ -21,7 +21,7 @@ export default async function ProjectOdooPage({ params }: { params: Promise<{ id
       supabase.from("transaction_types").select("id, name, type").order("name"),
       supabase
         .from("user_odoo_settings")
-        .select("odoo_url, odoo_database, odoo_login, odoo_password")
+        .select("odoo_url, odoo_database, odoo_login, odoo_password, odoo_company_id")
         .eq("user_id", user.id)
         .maybeSingle(),
     ])
@@ -49,6 +49,10 @@ export default async function ProjectOdooPage({ params }: { params: Promise<{ id
 
   const canImport = membership.role !== "observer" && project.status !== "archived"
   const profileOdooConfigured = !!(odoo?.odoo_url && odoo?.odoo_login && odoo?.odoo_password)
+  const savedOdooCompanyId =
+    odoo?.odoo_company_id != null && Number.isFinite(Number(odoo.odoo_company_id)) && Number(odoo.odoo_company_id) > 0
+      ? Number(odoo.odoo_company_id)
+      : null
 
   return (
     <div className="space-y-6">
@@ -84,6 +88,7 @@ export default async function ProjectOdooPage({ params }: { params: Promise<{ id
         incomeTypeOptions={incomeTypeOptions}
         canImport={canImport}
         profileOdooConfigured={profileOdooConfigured}
+        savedOdooCompanyId={savedOdooCompanyId}
       />
     </div>
   )

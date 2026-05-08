@@ -84,11 +84,14 @@ export async function odooSearchRead(
   password: string,
   model: string,
   domain: unknown[],
-  options: { fields: string[]; limit?: number; order?: string }
+  options: { fields: string[]; limit?: number; order?: string; context?: Record<string, unknown> }
 ): Promise<Record<string, unknown>[]> {
-  const { fields, limit = 80, order } = options
+  const { fields, limit = 80, order, context } = options
   const kwargs: Record<string, unknown> = { fields, limit }
   if (order) kwargs.order = order
+  if (context && Object.keys(context).length > 0) {
+    kwargs.context = context
+  }
 
   const rows = await odooJsonRpc(baseUrl, "object", "execute_kw", [
     db,

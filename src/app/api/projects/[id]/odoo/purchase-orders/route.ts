@@ -3,7 +3,7 @@ import { createServerClient } from "@supabase/ssr"
 import { NextResponse } from "next/server"
 import { fetchOdooPurchaseOrdersForUser } from "@/lib/odoo/import-records"
 
-export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const projectId = (await params).id
   const cookieStore = await cookies()
   const supabase = createServerClient(
@@ -37,7 +37,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
 
   const { data: creds } = await supabase
     .from("user_odoo_settings")
-    .select("odoo_url, odoo_database, odoo_login, odoo_password")
+    .select("odoo_url, odoo_database, odoo_login, odoo_password, odoo_company_id")
     .eq("user_id", user.id)
     .maybeSingle()
 
@@ -48,8 +48,32 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     )
   }
 
+  let body: { companyId?: unknown; dateFrom?: unknown; dateTo?: unknown }
   try {
-    const rows = await fetchOdooPurchaseOrdersForUser(creds)
+    body = await req.json()
+  } catch {
+    body = {}
+  }
+
+  const dateFrom = typeof body.dateFrom === "string" ? body.dateFrom.trim() : ""
+  const dateTo = typeof body.dateTo === "string" ? body.dateTo.trim() : ""
+  if (!dateFrom || !dateTo) {
+    return NextResponse.json({ message: "Indica rango de fechas (desde y hasta)." }, { status: 400 })
+  }
+
+  const fromBody = body.companyId != null && body.companyId !== "" ? Number(body.companyId) : NaN
+  const saved = creds.odoo_company_id != null ? Number(creds.odoo_company_id) : NaN
+  const companyId = Number.isFinite(fromBody) && fromBody > 0 ? fromBody : Number.isFinite(saved) && saved > 0 ? saved : NaN
+
+  if (!Number.isFinite(companyId) || companyId <= 0) {
+    return NextResponse.json(
+      { message: "Selecciona una empresa Odoo en tu perfil o con el selector." },
+      { status: 400 }
+    )
+  }
+
+  try {
+    const rows = await fetchOdooPurchaseOrdersForUser(creds, { companyId, dateFrom, dateTo })
     return NextResponse.json({ rows })
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Error al conectar con Odoo"

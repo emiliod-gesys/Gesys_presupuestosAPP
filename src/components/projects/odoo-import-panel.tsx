@@ -1,15 +1,17 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
 import { Select } from "@/components/ui/select"
 import { useToast } from "@/components/ui/toast"
 import { formatCurrency, cn } from "@/lib/utils"
 import type { OdooDocKind, OdooImportRow, OdooPurchaseOrderRow } from "@/lib/odoo/import-records"
-import { Download, Package, Receipt } from "lucide-react"
+import { Download, Package, Receipt, RefreshCw } from "lucide-react"
 
 type Opt = { value: string; label: string }
 
@@ -26,6 +28,15 @@ function keyForDoc(r: OdooImportRow) {
   return `${r.model}:${r.odooId}`
 }
 
+function defaultOdooImportDateRange() {
+  const today = new Date()
+  const start = new Date(today.getFullYear(), today.getMonth(), 1)
+  return {
+    from: start.toISOString().slice(0, 10),
+    to: today.toISOString().slice(0, 10),
+  }
+}
+
 export function OdooImportPanel({
   projectId,
   currency,
@@ -34,6 +45,7 @@ export function OdooImportPanel({
   incomeTypeOptions,
   canImport,
   profileOdooConfigured,
+  savedOdooCompanyId,
 }: {
   projectId: string
   currency: string
@@ -42,6 +54,7 @@ export function OdooImportPanel({
   incomeTypeOptions: Opt[]
   canImport: boolean
   profileOdooConfigured: boolean
+  savedOdooCompanyId: number | null
 }) {
   const { toast } = useToast()
   const router = useRouter()
@@ -62,6 +75,76 @@ export function OdooImportPanel({
   const [selectedPo, setSelectedPo] = useState<Set<number>>(new Set())
   const [poCategory, setPoCategory] = useState<Record<number, string>>({})
 
+  const range0 = useMemo(() => defaultOdooImportDateRange(), [])
+  const [dateFrom, setDateFrom] = useState(range0.from)
+  const [dateTo, setDateTo] = useState(range0.to)
+  const [companies, setCompanies] = useState<{ id: number; name: string }[]>([])
+  const [companiesLoading, setCompaniesLoading] = useState(false)
+  const [companyId, setCompanyId] = useState("")
+
+  const persistCompanyId = async (id: number) => {
+    const supabase = createClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user) return
+    const { error } = await supabase
+      .from("user_odoo_settings")
+      .update({ odoo_company_id: id, updated_at: new Date().toISOString() })
+      .eq("user_id", user.id)
+    if (error) {
+      toast("error", "No se pudo guardar la empresa en tu perfil")
+      return
+    }
+    router.refresh()
+  }
+
+  const refreshCompanies = async (opts?: { announce?: boolean }) => {
+    setCompaniesLoading(true)
+    try {
+      const res = await fetch("/api/odoo/companies", { method: "POST" })
+      const data = await res.json()
+      if (!res.ok) {
+        toast("error", data.message || "No se pudieron cargar las empresas de Odoo")
+        setCompanies([])
+        setCompanyId("")
+        return
+      }
+      const list = (data.companies || []) as { id: number; name: string }[]
+      setCompanies(list)
+      let next = ""
+      if (savedOdooCompanyId != null && list.some((c) => c.id === savedOdooCompanyId)) {
+        next = String(savedOdooCompanyId)
+      } else if (list.length === 1) {
+        next = String(list[0].id)
+        await persistCompanyId(list[0].id)
+      }
+      setCompanyId(next)
+      if (opts?.announce) toast("success", `${list.length} empresa(s) cargadas desde Odoo`)
+    } finally {
+      setCompaniesLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    void refreshCompanies()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- carga inicial de empresas Odoo
+  }, [])
+
+  useEffect(() => {
+    if (savedOdooCompanyId == null) return
+    if (!companies.some((c) => c.id === savedOdooCompanyId)) return
+    setCompanyId(String(savedOdooCompanyId))
+  }, [savedOdooCompanyId, companies])
+
+  const companyOptions = useMemo(
+    () => [{ value: "", label: "Elige empresa…" }, ...companies.map((c) => ({ value: String(c.id), label: c.name }))],
+    [companies]
+  )
+
+  const odooFiltersReady =
+    Number.isFinite(Number(companyId)) && Number(companyId) > 0 && dateFrom.trim() !== "" && dateTo.trim() !== ""
+
   const defaultExpenseCat = categoryOptions[0]?.value ?? ""
   const defaultIncomeCat = categoryOptions[0]?.value ?? ""
   const defaultExpenseTx = expenseTypeOptions[0]?.value ?? ""
@@ -81,13 +164,27 @@ export function OdooImportPanel({
       toast("error", "Selecciona al menos un tipo de documento")
       return
     }
+    const cid = Number(companyId)
+    if (!Number.isFinite(cid) || cid <= 0) {
+      toast("error", "Selecciona una empresa Odoo")
+      return
+    }
+    if (!dateFrom.trim() || !dateTo.trim()) {
+      toast("error", "Indica fecha desde y hasta")
+      return
+    }
     setDocLoading(true)
     setDocWarnings([])
     try {
       const res = await fetch(`/api/projects/${projectId}/odoo/list`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kinds: [...kinds] }),
+        body: JSON.stringify({
+          kinds: [...kinds],
+          companyId: cid,
+          dateFrom: dateFrom.trim(),
+          dateTo: dateTo.trim(),
+        }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -171,9 +268,26 @@ export function OdooImportPanel({
   }
 
   const loadPurchaseOrders = async () => {
+    const cid = Number(companyId)
+    if (!Number.isFinite(cid) || cid <= 0) {
+      toast("error", "Selecciona una empresa Odoo")
+      return
+    }
+    if (!dateFrom.trim() || !dateTo.trim()) {
+      toast("error", "Indica fecha desde y hasta")
+      return
+    }
     setPoLoading(true)
     try {
-      const res = await fetch(`/api/projects/${projectId}/odoo/purchase-orders`, { method: "POST" })
+      const res = await fetch(`/api/projects/${projectId}/odoo/purchase-orders`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyId: cid,
+          dateFrom: dateFrom.trim(),
+          dateTo: dateTo.trim(),
+        }),
+      })
       const data = await res.json()
       if (!res.ok) {
         toast("error", data.message || "Error al cargar órdenes de compra")
@@ -273,6 +387,47 @@ export function OdooImportPanel({
 
   return (
     <div className="space-y-8">
+      <Card className="border-[#875A7B]/15">
+        <CardHeader>
+          <h2 className="text-sm font-semibold text-gray-900">Empresa Odoo y período</h2>
+          <p className="text-xs text-gray-500">
+            Las importaciones usan una empresa y un rango de fechas para no descargar toda la base. La empresa elegida se
+            guarda en tu perfil como predeterminada.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+            <div className="min-w-[14rem] flex-1">
+              <Select
+                label="Empresa"
+                options={companyOptions}
+                value={companyId}
+                onChange={(e) => {
+                  const v = e.target.value
+                  setCompanyId(v)
+                  const n = Number(v)
+                  if (Number.isFinite(n) && n > 0) void persistCompanyId(n)
+                }}
+                className="text-sm"
+              />
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void refreshCompanies({ announce: true })}
+              loading={companiesLoading}
+              className="shrink-0 border-[#875A7B]/30"
+            >
+              <RefreshCw className="h-4 w-4" /> Actualizar empresas
+            </Button>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Input label="Desde" type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+            <Input label="Hasta" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+          </div>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <div className="flex flex-wrap items-center gap-2">
@@ -305,7 +460,13 @@ export function OdooImportPanel({
             ))}
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" onClick={loadDocuments} loading={docLoading} disabled={!canImport}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={loadDocuments}
+              loading={docLoading}
+              disabled={!canImport || !odooFiltersReady}
+            >
               <Download className="h-4 w-4" /> Cargar desde Odoo
             </Button>
             <Button
@@ -425,7 +586,13 @@ export function OdooImportPanel({
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" onClick={loadPurchaseOrders} loading={poLoading} disabled={!canImport}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={loadPurchaseOrders}
+              loading={poLoading}
+              disabled={!canImport || !odooFiltersReady}
+            >
               <Download className="h-4 w-4" /> Cargar órdenes de compra
             </Button>
             <Button type="button" onClick={importPurchaseOrders} loading={poImporting} disabled={!canImport || selectedPo.size === 0}>

@@ -48,7 +48,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   if (!membership) return NextResponse.json({ message: "Prohibido" }, { status: 403 })
 
-  let body: { kinds?: unknown }
+  const { data: creds } = await supabase
+    .from("user_odoo_settings")
+    .select("odoo_url, odoo_database, odoo_login, odoo_password, odoo_company_id")
+    .eq("user_id", user.id)
+    .maybeSingle()
+
+  if (!creds?.odoo_url || !creds.odoo_login || !creds.odoo_password) {
+    return NextResponse.json(
+      { message: "Configura la vinculación Odoo en tu perfil (URL, base de datos si aplica, usuario y contraseña)." },
+      { status: 400 }
+    )
+  }
+
+  let body: { kinds?: unknown; companyId?: unknown; dateFrom?: unknown; dateTo?: unknown }
   try {
     body = await req.json()
   } catch {
@@ -61,21 +74,29 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ message: "Indica al menos un tipo de documento válido" }, { status: 400 })
   }
 
-  const { data: creds } = await supabase
-    .from("user_odoo_settings")
-    .select("odoo_url, odoo_database, odoo_login, odoo_password")
-    .eq("user_id", user.id)
-    .maybeSingle()
+  const dateFrom = typeof body.dateFrom === "string" ? body.dateFrom.trim() : ""
+  const dateTo = typeof body.dateTo === "string" ? body.dateTo.trim() : ""
+  if (!dateFrom || !dateTo) {
+    return NextResponse.json({ message: "Indica rango de fechas (desde y hasta) para acotar la importación." }, { status: 400 })
+  }
 
-  if (!creds?.odoo_url || !creds.odoo_login || !creds.odoo_password) {
+  const fromBody = body.companyId != null && body.companyId !== "" ? Number(body.companyId) : NaN
+  const saved = creds.odoo_company_id != null ? Number(creds.odoo_company_id) : NaN
+  const companyId = Number.isFinite(fromBody) && fromBody > 0 ? fromBody : Number.isFinite(saved) && saved > 0 ? saved : NaN
+
+  if (!Number.isFinite(companyId) || companyId <= 0) {
     return NextResponse.json(
-      { message: "Configura la vinculación Odoo en tu perfil (URL, base de datos si aplica, usuario y contraseña)." },
+      { message: "Selecciona una empresa Odoo en tu perfil o con el selector de la pestaña Odoo." },
       { status: 400 }
     )
   }
 
   try {
-    const { rows, warnings } = await fetchOdooDocumentsForUser(creds, kinds)
+    const { rows, warnings } = await fetchOdooDocumentsForUser(creds, kinds, {
+      companyId,
+      dateFrom,
+      dateTo,
+    })
     return NextResponse.json({ rows, warnings })
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Error al conectar con Odoo"
