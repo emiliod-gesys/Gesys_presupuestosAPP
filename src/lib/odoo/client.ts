@@ -33,6 +33,29 @@ function odooRpcErrorMessage(err: { message?: string; data?: { message?: string;
   return "Error desconocido de Odoo"
 }
 
+/**
+ * Odoo a veces devuelve textos crudos de PostgreSQL (FATAL, puerto 5432). Los convertimos en
+ * instrucciones útiles para el usuario (nombre de base en el perfil, instancia propia, etc.).
+ */
+export function formatOdooUserFacingError(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err)
+  const lower = raw.toLowerCase()
+  if (/fatal:\s*database/i.test(raw) && /does not exist/i.test(raw)) {
+    return (
+      "Odoo no encontró la base de datos con el nombre que enviamos al autenticar. " +
+      "Si la URL es del tipo nombre.odoo.com, prueba a dejar vacío el campo «Base de datos Odoo» del perfil y guardar de nuevo. " +
+      "En un servidor propio, el nombre debe coincidir con la base PostgreSQL que usa tu instancia Odoo (consúltalo con quien la administra)."
+    )
+  }
+  if (/connection to server at/i.test(lower) && /5432/.test(raw)) {
+    return (
+      "La instancia Odoo respondió con un error de conexión a su PostgreSQL interno. " +
+      "Suele indicar nombre de base incorrecto en el perfil o un fallo en el servidor Odoo. Revisa «Base de datos Odoo» o contacta al administrador de esa instancia."
+    )
+  }
+  return raw
+}
+
 export async function odooJsonRpc(baseUrl: string, service: string, method: string, args: unknown[]): Promise<unknown> {
   const url = `${normalizeOdooBaseUrl(baseUrl)}/jsonrpc`
   const res = await fetch(url, {

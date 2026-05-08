@@ -1,6 +1,7 @@
 import { cookies } from "next/headers"
 import { createServerClient } from "@supabase/ssr"
 import { NextResponse } from "next/server"
+import { formatOdooUserFacingError } from "@/lib/odoo/client"
 import { fetchOdooDocumentsForUser, type OdooDocKind } from "@/lib/odoo/import-records"
 
 const ALL_KINDS: OdooDocKind[] = [
@@ -99,7 +100,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     })
     return NextResponse.json({ rows, warnings })
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "Error al conectar con Odoo"
+    const msg = formatOdooUserFacingError(e)
     return NextResponse.json({ message: msg }, { status: 502 })
   }
 }

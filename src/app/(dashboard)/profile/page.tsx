@@ -319,8 +319,11 @@ export default function ProfilePage() {
             label="Base de datos Odoo (opcional)"
             value={odooDatabase}
             onChange={(e) => setOdooDatabase(e.target.value)}
-            placeholder="Ej. mi-empresa o el nombre que ves al iniciar sesión"
-            helperText="En odoo.com suele coincidir con el subdominio. En servidor propio indícalo si la conexión falla."
+            placeholder="Dejar vacío en nombre.odoo.com salvo que te indiquen otro nombre"
+            helperText={
+              "En URLs nombre.odoo.com suele bastar dejarlo vacío (usamos el subdominio). " +
+              "Rellenarlo mal puede provocar errores al cargar empresas. En servidor propio debe coincidir con la base PostgreSQL de Odoo."
+            }
           />
           <Input
             label="Correo en Odoo"

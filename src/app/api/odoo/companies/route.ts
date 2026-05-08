@@ -1,6 +1,7 @@
 import { cookies } from "next/headers"
 import { createServerClient } from "@supabase/ssr"
 import { NextResponse } from "next/server"
+import { formatOdooUserFacingError } from "@/lib/odoo/client"
 import { fetchOdooCompaniesForUser } from "@/lib/odoo/import-records"
 
 /** Lista empresas Odoo (res.company) con las credenciales del usuario en sesión. */
@@ -43,7 +44,7 @@ export async function POST() {
     const companies = await fetchOdooCompaniesForUser(creds)
     return NextResponse.json({ companies })
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "Error al conectar con Odoo"
+    const msg = formatOdooUserFacingError(e)
     return NextResponse.json({ message: msg }, { status: 502 })
   }
 }
