@@ -302,8 +302,8 @@ export default function ProfilePage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-xs text-gray-500 leading-relaxed">
-            Indica la URL de tu base Odoo (por ejemplo la dirección con la que abres Odoo en el navegador), el correo y la
-            contraseña con los que inicias sesión. Solo tú puedes ver estos datos; guárdalos en un entorno de confianza y
+            Indica la URL de tu base Odoo (por ejemplo la dirección con la que abres Odoo en el navegador), el mismo usuario o
+            correo con el que inicias sesión y la contraseña. Solo tú puedes ver estos datos; guárdalos en un entorno de confianza y
             revisa las políticas de tu organización antes de almacenar credenciales en la nube.
           </p>
           <Input
@@ -326,12 +326,13 @@ export default function ProfilePage() {
             }
           />
           <Input
-            label="Correo en Odoo"
-            type="email"
+            label="Usuario o correo en Odoo"
+            type="text"
             autoComplete="username"
             value={odooLogin}
             onChange={(e) => setOdooLogin(e.target.value)}
-            placeholder="usuario@empresa.com"
+            placeholder="El mismo que en la pantalla de inicio de sesión de Odoo"
+            helperText="En odoo.com suele ser tu correo. En instalaciones antiguas puede ser un nombre de usuario (p. ej. admin)."
           />
           <Input
             label="Contraseña de Odoo"

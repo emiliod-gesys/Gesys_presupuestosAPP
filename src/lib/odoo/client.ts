@@ -39,6 +39,47 @@ export async function odooListDatabases(baseUrl: string): Promise<string[]> {
   return []
 }
 
+/** Extrae el valor del campo oculto `db` del HTML de login (misma base que usa la UI web). */
+function parseDbFromLoginHtml(html: string): string | null {
+  const slice = html.length > 800_000 ? html.slice(0, 800_000) : html
+  const patterns = [
+    /name=["']db["']\s[^>]*value=["']([^"']*)["']/i,
+    /name=["']db["'][^>]*value=["']([^"']*)["']/i,
+    /value=["']([^"']*)["'][^>]*name=["']db["']/i,
+  ]
+  for (const re of patterns) {
+    const m = slice.match(re)
+    const v = m?.[1]?.trim()
+    if (v) return v
+  }
+  return null
+}
+
+/**
+ * Odoo Online y muchas instalaciones no exponen `db.list`; el formulario `/web/login` suele
+ * incluir `<input name="db" value="…"/>` con el nombre exacto para autenticar.
+ */
+export async function odooDatabaseFromWebLogin(baseUrl: string): Promise<string | null> {
+  const root = normalizeOdooBaseUrl(baseUrl)
+  const ctrl =
+    typeof AbortSignal !== "undefined" && "timeout" in AbortSignal
+      ? AbortSignal.timeout(18_000)
+      : undefined
+  try {
+    const res = await fetch(`${root}/web/login`, {
+      redirect: "follow",
+      headers: { Accept: "text/html,*/*;q=0.8" },
+      cache: "no-store",
+      signal: ctrl,
+    })
+    if (!res.ok) return null
+    const html = await res.text()
+    return parseDbFromLoginHtml(html)
+  } catch {
+    return null
+  }
+}
+
 /**
  * Nombre de base para `authenticate` / `execute_kw`: usa `db.list` cuando hay datos,
  * respeta el valor del perfil si coincide, y si no hay listado conserva la inferencia de `resolveOdooDatabase`.
@@ -81,12 +122,23 @@ export async function resolveOdooDatabaseForAuth(
     )
   }
 
-  if (!preferred) {
-    throw new Error(
-      "Indica el nombre de la base de datos Odoo en tu perfil (obligatorio salvo URLs tipo *.odoo.com)."
-    )
+  const fromLogin = await odooDatabaseFromWebLogin(baseUrl)
+
+  if (explicitTrim) {
+    return explicitTrim
   }
-  return preferred
+
+  if (fromLogin) {
+    return fromLogin
+  }
+
+  if (preferred) {
+    return preferred
+  }
+
+  throw new Error(
+    "Indica el nombre de la base de datos Odoo en tu perfil (obligatorio salvo URLs tipo *.odoo.com)."
+  )
 }
 
 function odooRpcErrorMessage(err: { message?: string; data?: { message?: string; name?: string; debug?: string } }): string {
@@ -107,8 +159,8 @@ export function formatOdooUserFacingError(err: unknown): string {
   if (/fatal:\s*database/i.test(raw) && /does not exist/i.test(raw)) {
     return (
       "Odoo no encontró la base de datos con el nombre que enviamos al autenticar. " +
-      "Si la URL es del tipo nombre.odoo.com, prueba a dejar vacío el campo «Base de datos Odoo» del perfil y guardar de nuevo. " +
-      "En un servidor propio, el nombre debe coincidir con la base PostgreSQL que usa tu instancia Odoo (consúltalo con quien la administra)."
+      "La app intenta tomar el nombre desde la página de login de tu URL; comprueba que «Correo en Odoo» sea el mismo que usas en el navegador (en odoo.com suele ser un correo, no la palabra admin salvo que sea tu usuario). " +
+      "Si rellenaste «Base de datos Odoo», prueba a vaciarlo y guardar. En servidor propio, el nombre debe coincidir con la base que usa tu instancia."
     )
   }
   if (/connection to server at/i.test(lower) && /5432/.test(raw)) {
