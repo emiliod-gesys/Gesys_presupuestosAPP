@@ -25,6 +25,70 @@ export function resolveOdooDatabase(odooUrl: string | null, explicit: string | n
   return null
 }
 
+/**
+ * Lista bases que la instancia expone por JSON-RPC (`db.list`), si está permitido.
+ * En Odoo Online / SaaS suele fallar o devolver vacío; en servidor propio suele funcionar.
+ */
+export async function odooListDatabases(baseUrl: string): Promise<string[]> {
+  try {
+    const r = await odooJsonRpc(baseUrl, "db", "list", [])
+    if (Array.isArray(r)) return r.filter((x): x is string => typeof x === "string" && x.length > 0)
+  } catch {
+    /* db.list deshabilitado o no disponible */
+  }
+  return []
+}
+
+/**
+ * Nombre de base para `authenticate` / `execute_kw`: usa `db.list` cuando hay datos,
+ * respeta el valor del perfil si coincide, y si no hay listado conserva la inferencia de `resolveOdooDatabase`.
+ */
+export async function resolveOdooDatabaseForAuth(
+  baseUrl: string,
+  odooUrl: string,
+  explicit: string | null
+): Promise<string> {
+  const preferred = resolveOdooDatabase(odooUrl, explicit)
+  const list = await odooListDatabases(baseUrl)
+  const explicitTrim = explicit?.trim() ?? ""
+
+  if (list.length === 1) {
+    return list[0]!
+  }
+
+  if (explicitTrim && list.includes(explicitTrim)) {
+    return explicitTrim
+  }
+
+  if (preferred && list.includes(preferred)) {
+    return preferred
+  }
+
+  const byLower = new Map(list.map((d) => [d.toLowerCase(), d]))
+  const byLowerGet = (s: string) => byLower.get(s.toLowerCase()) ?? null
+  if (explicitTrim) {
+    const hit = byLowerGet(explicitTrim)
+    if (hit) return hit
+  }
+  if (preferred) {
+    const hit = byLowerGet(preferred)
+    if (hit) return hit
+  }
+
+  if (list.length > 1) {
+    throw new Error(
+      `Esta instancia Odoo tiene varias bases de datos. Indica en «Base de datos Odoo» del perfil exactamente una de estas: ${list.join(", ")}.`
+    )
+  }
+
+  if (!preferred) {
+    throw new Error(
+      "Indica el nombre de la base de datos Odoo en tu perfil (obligatorio salvo URLs tipo *.odoo.com)."
+    )
+  }
+  return preferred
+}
+
 function odooRpcErrorMessage(err: { message?: string; data?: { message?: string; name?: string; debug?: string } }): string {
   const d = err.data
   if (d?.message) return String(d.message)

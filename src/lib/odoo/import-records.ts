@@ -1,6 +1,6 @@
 import {
   normalizeOdooBaseUrl,
-  resolveOdooDatabase,
+  resolveOdooDatabaseForAuth,
   odooAuthenticate,
   odooSearchRead,
   partnerLabel,
@@ -111,13 +111,8 @@ export async function fetchOdooCompaniesForUser(
   if (!url?.trim() || !login?.trim() || !password) {
     throw new Error("Completa URL, correo y contraseña de Odoo en tu perfil.")
   }
-  const db = resolveOdooDatabase(url, settings.odoo_database)
-  if (!db) {
-    throw new Error(
-      "Indica el nombre de la base de datos Odoo en tu perfil (obligatorio salvo URLs tipo *.odoo.com)."
-    )
-  }
   const baseUrl = normalizeOdooBaseUrl(url)
+  const db = await resolveOdooDatabaseForAuth(baseUrl, url, settings.odoo_database)
   const uid = await odooAuthenticate(baseUrl, db, login.trim(), password)
 
   const rows = await odooSearchRead(baseUrl, db, uid, password, "res.company", [], {
@@ -147,12 +142,6 @@ export async function fetchOdooDocumentsForUser(
   if (!url?.trim() || !login?.trim() || !password) {
     throw new Error("Completa URL, correo y contraseña de Odoo en tu perfil.")
   }
-  const db = resolveOdooDatabase(url, settings.odoo_database)
-  if (!db) {
-    throw new Error(
-      "Indica el nombre de la base de datos Odoo en tu perfil (obligatorio salvo URLs tipo *.odoo.com)."
-    )
-  }
 
   assertYmd("Desde", filters.dateFrom)
   assertYmd("Hasta", filters.dateTo)
@@ -164,6 +153,7 @@ export async function fetchOdooDocumentsForUser(
   }
 
   const baseUrl = normalizeOdooBaseUrl(url)
+  const db = await resolveOdooDatabaseForAuth(baseUrl, url, settings.odoo_database)
   const uid = await odooAuthenticate(baseUrl, db, login.trim(), password)
   const ctx = odooCompanyContext(filters.companyId)
 
@@ -315,12 +305,6 @@ export async function fetchOdooPurchaseOrdersForUser(
   if (!url?.trim() || !login?.trim() || !password) {
     throw new Error("Completa URL, correo y contraseña de Odoo en tu perfil.")
   }
-  const db = resolveOdooDatabase(url, settings.odoo_database)
-  if (!db) {
-    throw new Error(
-      "Indica el nombre de la base de datos Odoo en tu perfil (obligatorio salvo URLs tipo *.odoo.com)."
-    )
-  }
 
   assertYmd("Desde", filters.dateFrom)
   assertYmd("Hasta", filters.dateTo)
@@ -332,6 +316,7 @@ export async function fetchOdooPurchaseOrdersForUser(
   }
 
   const baseUrl = normalizeOdooBaseUrl(url)
+  const db = await resolveOdooDatabaseForAuth(baseUrl, url, settings.odoo_database)
   const uid = await odooAuthenticate(baseUrl, db, login.trim(), password)
   const ctx = odooCompanyContext(filters.companyId)
 
