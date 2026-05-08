@@ -1,7 +1,7 @@
 import {
   normalizeOdooBaseUrl,
-  resolveOdooDatabaseForAuth,
-  odooAuthenticate,
+  buildOdooDatabaseCandidates,
+  odooAuthenticateWithDbCandidates,
   odooSearchRead,
   partnerLabel,
   num,
@@ -112,8 +112,8 @@ export async function fetchOdooCompaniesForUser(
     throw new Error("Completa URL, correo y contraseña de Odoo en tu perfil.")
   }
   const baseUrl = normalizeOdooBaseUrl(url)
-  const db = await resolveOdooDatabaseForAuth(baseUrl, url, settings.odoo_database)
-  const uid = await odooAuthenticate(baseUrl, db, login.trim(), password)
+  const dbCandidates = await buildOdooDatabaseCandidates(baseUrl, url, settings.odoo_database)
+  const { uid, db } = await odooAuthenticateWithDbCandidates(baseUrl, dbCandidates, login.trim(), password)
 
   const rows = await odooSearchRead(baseUrl, db, uid, password, "res.company", [], {
     fields: ["id", "name"],
@@ -153,8 +153,8 @@ export async function fetchOdooDocumentsForUser(
   }
 
   const baseUrl = normalizeOdooBaseUrl(url)
-  const db = await resolveOdooDatabaseForAuth(baseUrl, url, settings.odoo_database)
-  const uid = await odooAuthenticate(baseUrl, db, login.trim(), password)
+  const dbCandidates = await buildOdooDatabaseCandidates(baseUrl, url, settings.odoo_database)
+  const { uid, db } = await odooAuthenticateWithDbCandidates(baseUrl, dbCandidates, login.trim(), password)
   const ctx = odooCompanyContext(filters.companyId)
 
   const out: OdooImportRow[] = []
@@ -316,8 +316,8 @@ export async function fetchOdooPurchaseOrdersForUser(
   }
 
   const baseUrl = normalizeOdooBaseUrl(url)
-  const db = await resolveOdooDatabaseForAuth(baseUrl, url, settings.odoo_database)
-  const uid = await odooAuthenticate(baseUrl, db, login.trim(), password)
+  const dbCandidates = await buildOdooDatabaseCandidates(baseUrl, url, settings.odoo_database)
+  const { uid, db } = await odooAuthenticateWithDbCandidates(baseUrl, dbCandidates, login.trim(), password)
   const ctx = odooCompanyContext(filters.companyId)
 
   const domain = domainCompanyDate(filters.companyId, "date_order", filters.dateFrom, filters.dateTo, [
