@@ -100,7 +100,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     })
     return NextResponse.json({ rows, warnings })
   } catch (e) {
-    const msg = formatOdooUserFacingError(e)
+    const msg = formatOdooUserFacingError(e, { odooUrl: creds.odoo_url, odooLogin: creds.odoo_login })
     return NextResponse.json({ message: msg }, { status: 502 })
   }
 }

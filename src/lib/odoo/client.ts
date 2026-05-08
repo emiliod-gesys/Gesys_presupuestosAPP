@@ -25,6 +25,17 @@ export function resolveOdooDatabase(odooUrl: string | null, explicit: string | n
   return null
 }
 
+/** URL apunta a Odoo en la nube (hostname …odoo.com). */
+export function isOdooPublicCloudUrl(odooUrl: string | null | undefined): boolean {
+  if (!odooUrl?.trim()) return false
+  try {
+    const host = new URL(normalizeOdooBaseUrl(odooUrl)).hostname.toLowerCase()
+    return host === "odoo.com" || host.endsWith(".odoo.com")
+  } catch {
+    return false
+  }
+}
+
 /**
  * Lista bases que la instancia expone por JSON-RPC (`db.list`), si está permitido.
  * En Odoo Online / SaaS suele fallar o devolver vacío; en servidor propio suele funcionar.
@@ -271,21 +282,40 @@ function odooRpcErrorMessage(err: { message?: string; data?: { message?: string;
  * Odoo a veces devuelve textos crudos de PostgreSQL (FATAL, puerto 5432). Los convertimos en
  * instrucciones útiles para el usuario (nombre de base en el perfil, instancia propia, etc.).
  */
-export function formatOdooUserFacingError(err: unknown): string {
+export type OdooUserFacingErrorContext = {
+  odooUrl?: string | null
+  odooLogin?: string | null
+}
+
+export function formatOdooUserFacingError(err: unknown, opts?: OdooUserFacingErrorContext): string {
   const raw = err instanceof Error ? err.message : String(err)
   const lower = raw.toLowerCase()
+  const cloud = isOdooPublicCloudUrl(opts?.odooUrl)
+  const loginLooksAdmin = opts?.odooLogin?.trim().toLowerCase() === "admin"
+
   if (/fatal:\s*database/i.test(raw) && /does not exist/i.test(raw)) {
-    return (
-      "Odoo no encontró la base de datos con el nombre que enviamos al autenticar. " +
-      "La app intenta tomar el nombre desde la página de login de tu URL; comprueba que «Correo en Odoo» sea el mismo que usas en el navegador (en odoo.com suele ser un correo, no la palabra admin salvo que sea tu usuario). " +
-      "Si rellenaste «Base de datos Odoo», prueba a vaciarlo y guardar. En servidor propio, el nombre debe coincidir con la base que usa tu instancia."
-    )
+    let out =
+      "Odoo respondió que no existe esa base de datos en su PostgreSQL interno (nombre distinto al que probamos o instancia mal enlazada). " +
+      "Comprueba que «Usuario o correo en Odoo» sea exactamente el mismo con el que inicias sesión en el navegador. " +
+      "Si rellenaste «Base de datos Odoo», prueba a dejarlo vacío y guardar otra vez."
+    if (cloud && loginLooksAdmin) {
+      out +=
+        " En URLs *.odoo.com el usuario casi nunca es «admin»: suele ser tu correo electrónico. Pon el correo que usas en Odoo y guarda."
+    } else if (cloud) {
+      out += " En *.odoo.com el acceso JSON-RPC usa el mismo usuario y contraseña que en la web."
+    } else {
+      out += " En servidor propio confirma el nombre real de la base con quien administra Odoo."
+    }
+    return out
   }
   if (/connection to server at/i.test(lower) && /5432/.test(raw)) {
-    return (
+    let out =
       "La instancia Odoo respondió con un error de conexión a su PostgreSQL interno. " +
-      "Suele indicar nombre de base incorrecto en el perfil o un fallo en el servidor Odoo. Revisa «Base de datos Odoo» o contacta al administrador de esa instancia."
-    )
+      "Revisa «Base de datos Odoo» o contacta al administrador de esa instancia."
+    if (cloud && loginLooksAdmin) {
+      out += " Si la URL es *.odoo.com, prueba usar tu correo de inicio de sesión en lugar de «admin»."
+    }
+    return out
   }
   return raw
 }

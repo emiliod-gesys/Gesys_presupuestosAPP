@@ -11,6 +11,7 @@ import { Avatar } from "@/components/ui/avatar"
 import { useToast } from "@/components/ui/toast"
 import { Save, KeyRound, RefreshCw } from "lucide-react"
 import type { Profile, UserOdooSettings } from "@/lib/types"
+import { isOdooPublicCloudUrl } from "@/lib/odoo/client"
 
 export default function ProfilePage() {
   const { toast } = useToast()
@@ -334,6 +335,12 @@ export default function ProfilePage() {
             placeholder="El mismo que en la pantalla de inicio de sesión de Odoo"
             helperText="En odoo.com suele ser tu correo. En instalaciones antiguas puede ser un nombre de usuario (p. ej. admin)."
           />
+          {isOdooPublicCloudUrl(odooUrl) && odooLogin.trim().toLowerCase() === "admin" && (
+            <p className="text-xs text-amber-800 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 leading-relaxed">
+              En URLs <strong>*.odoo.com</strong> casi siempre debes usar el <strong>mismo correo</strong> con el que inicias
+              sesión en el navegador, no la palabra «admin», salvo que en Odoo tu usuario sea realmente ese.
+            </p>
+          )}
           <Input
             label="Contraseña de Odoo"
             type="password"
