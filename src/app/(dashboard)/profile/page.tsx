@@ -335,10 +335,21 @@ export default function ProfilePage() {
             placeholder="El mismo que en la pantalla de inicio de sesión de Odoo"
             helperText="En odoo.com suele ser tu correo. En instalaciones antiguas puede ser un nombre de usuario (p. ej. admin)."
           />
-          {isOdooPublicCloudUrl(odooUrl) && odooLogin.trim().toLowerCase() === "admin" && (
+          {isOdooPublicCloudUrl(odooUrl) && (
             <p className="text-xs text-amber-800 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 leading-relaxed">
-              En URLs <strong>*.odoo.com</strong> casi siempre debes usar el <strong>mismo correo</strong> con el que inicias
-              sesión en el navegador, no la palabra «admin», salvo que en Odoo tu usuario sea realmente ese.
+              <strong>Odoo Online:</strong> para API/JSON-RPC el usuario suele necesitar una{" "}
+              <strong>contraseña local</strong> (Ajustes → Usuarios → tu usuario → Acción → Cambiar contraseña), distinta del
+              inicio SSO del portal. La <strong>API externa no está disponible en todos los planes</strong>; si el login web
+              funciona y la API no, revisa el plan y la{" "}
+              <a
+                href="https://www.odoo.com/documentation/18.0/developer/reference/external_api.html"
+                className="text-indigo-700 underline hover:text-indigo-900"
+                target="_blank"
+                rel="noreferrer"
+              >
+                documentación External API de Odoo
+              </a>
+              .
             </p>
           )}
           <Input

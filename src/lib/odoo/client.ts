@@ -300,7 +300,7 @@ export function formatOdooUserFacingError(err: unknown, opts?: OdooUserFacingErr
       "Si rellenaste «Base de datos Odoo», prueba a dejarlo vacío y guardar otra vez."
     if (cloud && loginLooksAdmin) {
       out +=
-        " En URLs *.odoo.com el usuario casi nunca es «admin»: suele ser tu correo electrónico. Pon el correo que usas en Odoo y guarda."
+        " Tu usuario «admin» puede ser correcto; además confirma contraseña local en el usuario Odoo y que tu plan permita la API externa (según documentación de Odoo)."
     } else if (cloud) {
       out += " En *.odoo.com el acceso JSON-RPC usa el mismo usuario y contraseña que en la web."
     } else {
@@ -312,8 +312,8 @@ export function formatOdooUserFacingError(err: unknown, opts?: OdooUserFacingErr
     let out =
       "La instancia Odoo respondió con un error de conexión a su PostgreSQL interno. " +
       "Revisa «Base de datos Odoo» o contacta al administrador de esa instancia."
-    if (cloud && loginLooksAdmin) {
-      out += " Si la URL es *.odoo.com, prueba usar tu correo de inicio de sesión en lugar de «admin»."
+    if (cloud) {
+      out += " Si la URL es *.odoo.com, revisa también restricciones del plan (API externa) y nombre de base en el campo opcional."
     }
     return out
   }
@@ -343,25 +343,91 @@ export async function odooJsonRpc(baseUrl: string, service: string, method: stri
   return json.result
 }
 
+/**
+ * Mismo flujo que el cliente web Odoo (`type='json'`). A veces responde distinto que `/jsonrpc` en proxys.
+ */
+async function odooWebSessionAuthenticate(
+  baseUrl: string,
+  db: string,
+  login: string,
+  password: string
+): Promise<number> {
+  const url = `${normalizeOdooBaseUrl(baseUrl)}/web/session/authenticate`
+  const ctrl =
+    typeof AbortSignal !== "undefined" && "timeout" in AbortSignal ? AbortSignal.timeout(22_000) : undefined
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      method: "call",
+      params: { db, login: login.trim(), password },
+      id: Date.now(),
+    }),
+    cache: "no-store",
+    signal: ctrl,
+  })
+  if (!res.ok) {
+    throw new Error(`Odoo session (${res.status})`)
+  }
+  const json = (await res.json()) as {
+    result?: { uid?: number } | false | null
+    error?: { message?: string; data?: { message?: string } }
+  }
+  if (json.error) {
+    throw new Error(odooRpcErrorMessage(json.error))
+  }
+  const r = json.result
+  if (r && typeof r === "object" && typeof r.uid === "number" && r.uid > 0) return r.uid
+  throw new Error("Sesión Odoo rechazada (uid no válido).")
+}
+
 export async function odooAuthenticate(baseUrl: string, db: string, login: string, password: string): Promise<number> {
-  const tryAuth = async (method: string, args: unknown[]) => {
-    const r = await odooJsonRpc(baseUrl, "common", method, args)
-    return r
+  const loginTrim = login.trim()
+  const errs: string[] = []
+
+  const capture = async (fn: () => Promise<number>): Promise<number | null> => {
+    try {
+      const u = await fn()
+      return typeof u === "number" && u > 0 ? u : null
+    } catch (e) {
+      errs.push(e instanceof Error ? e.message : String(e))
+      return null
+    }
   }
 
-  let uid = await tryAuth("authenticate", [db, login, password, {}])
-  if (typeof uid === "number" && uid > 0) return uid
-  if (uid && typeof uid === "object" && "uid" in uid && typeof (uid as { uid: unknown }).uid === "number") {
-    const u = (uid as { uid: number }).uid
-    if (u > 0) return u
-  }
+  let uid = await capture(() => odooWebSessionAuthenticate(baseUrl, db, loginTrim, password))
+  if (uid) return uid
 
-  uid = await tryAuth("login", [db, login, password])
-  if (typeof uid === "number" && uid > 0) return uid
+  uid = await capture(async () => {
+    const r = await odooJsonRpc(baseUrl, "common", "authenticate", [db, loginTrim, password, {}])
+    if (typeof r === "number" && r > 0) return r
+    if (r && typeof r === "object" && "uid" in r && typeof (r as { uid: unknown }).uid === "number") {
+      const u = (r as { uid: number }).uid
+      if (u > 0) return u
+    }
+    throw new Error("JSON-RPC authenticate no devolvió un uid válido.")
+  })
+  if (uid) return uid
 
-  throw new Error(
-    "No se pudo autenticar en Odoo. Revisa base de datos (perfil), usuario y contraseña. En servidores propios el nombre de la base suele ser obligatorio."
-  )
+  uid = await capture(async () => {
+    const r = await odooJsonRpc(baseUrl, "common", "login", [db, loginTrim, password])
+    if (typeof r === "number" && r > 0) return r
+    throw new Error("JSON-RPC login no devolvió un uid válido.")
+  })
+  if (uid) return uid
+
+  uid = await capture(async () => {
+    const { odooXmlRpcAuthenticate } = await import("@/lib/odoo/xmlrpc-common")
+    return odooXmlRpcAuthenticate(baseUrl, db, loginTrim, password)
+  })
+  if (uid) return uid
+
+  const last = errs.at(-1) ?? ""
+  const hints =
+    " En Odoo Online define una contraseña local para el usuario (Ajustes → Usuarios y compañías → Usuarios → Acción → Cambiar contraseña). " +
+    "Odoo solo expone datos por API externa en planes que la incluyan (consulta pricing y docs de External API)."
+  throw new Error((last ? `${last} ` : "") + hints.trim())
 }
 
 export async function odooSearchRead(
