@@ -18,6 +18,7 @@ export interface Profile {
 export interface UserOdooSettings {
   user_id: string
   odoo_url: string | null
+  odoo_database: string | null
   odoo_login: string | null
   odoo_password: string | null
   updated_at: string

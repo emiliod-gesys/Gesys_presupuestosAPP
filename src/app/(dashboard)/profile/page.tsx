@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Avatar } from "@/components/ui/avatar"
 import { useToast } from "@/components/ui/toast"
 import { Save, KeyRound } from "lucide-react"
-import type { Profile } from "@/lib/types"
+import type { Profile, UserOdooSettings } from "@/lib/types"
 
 export default function ProfilePage() {
   const { toast } = useToast()
@@ -20,6 +20,7 @@ export default function ProfilePage() {
   const [newPw, setNewPw] = useState("")
   const [confirmPw, setConfirmPw] = useState("")
   const [odooUrl, setOdooUrl] = useState("")
+  const [odooDatabase, setOdooDatabase] = useState("")
   const [odooLogin, setOdooLogin] = useState("")
   const [odooPassword, setOdooPassword] = useState("")
   const [hasStoredOdooPassword, setHasStoredOdooPassword] = useState(false)
@@ -37,13 +38,15 @@ export default function ProfilePage() {
       }
       const { data: odoo } = await supabase
         .from("user_odoo_settings")
-        .select("odoo_url, odoo_login, odoo_password")
+        .select("odoo_url, odoo_database, odoo_login, odoo_password")
         .eq("user_id", user.id)
         .maybeSingle()
       if (odoo) {
-        setOdooUrl(odoo.odoo_url || "")
-        setOdooLogin(odoo.odoo_login || "")
-        setHasStoredOdooPassword(!!odoo.odoo_password)
+        const o = odoo as UserOdooSettings
+        setOdooUrl(o.odoo_url || "")
+        setOdooDatabase(o.odoo_database || "")
+        setOdooLogin(o.odoo_login || "")
+        setHasStoredOdooPassword(!!o.odoo_password)
       }
     }
     load()
@@ -99,6 +102,7 @@ export default function ProfilePage() {
     const passTrim = odooPassword.trim()
 
     const urlTrim = odooUrl.trim().replace(/\/+$/, "") || null
+    const dbTrim = odooDatabase.trim() || null
 
     const { data: existing } = await supabase
       .from("user_odoo_settings")
@@ -111,11 +115,13 @@ export default function ProfilePage() {
     if (existing) {
       const patch: {
         odoo_url: string | null
+        odoo_database: string | null
         odoo_login: string | null
         updated_at: string
         odoo_password?: string
       } = {
         odoo_url: urlTrim,
+        odoo_database: dbTrim,
         odoo_login: loginTrim || null,
         updated_at: updatedAt,
       }
@@ -143,6 +149,7 @@ export default function ProfilePage() {
       const { error } = await supabase.from("user_odoo_settings").insert({
         user_id: user.id,
         odoo_url: urlTrim,
+        odoo_database: dbTrim,
         odoo_login: loginTrim || null,
         odoo_password: passTrim,
         updated_at: updatedAt,
@@ -233,6 +240,13 @@ export default function ProfilePage() {
             onChange={(e) => setOdooUrl(e.target.value)}
             placeholder="https://tu-empresa.odoo.com"
             helperText="Sin barra final; suele ser el mismo enlace que usas para entrar a Odoo."
+          />
+          <Input
+            label="Base de datos Odoo (opcional)"
+            value={odooDatabase}
+            onChange={(e) => setOdooDatabase(e.target.value)}
+            placeholder="Ej. mi-empresa o el nombre que ves al iniciar sesión"
+            helperText="En odoo.com suele coincidir con el subdominio. En servidor propio indícalo si la conexión falla."
           />
           <Input
             label="Correo en Odoo"

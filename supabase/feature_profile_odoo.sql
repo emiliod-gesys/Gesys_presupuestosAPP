@@ -4,6 +4,7 @@
 create table if not exists public.user_odoo_settings (
   user_id uuid primary key references public.profiles(id) on delete cascade,
   odoo_url text,
+  odoo_database text,
   odoo_login text,
   odoo_password text,
   updated_at timestamptz not null default now()
