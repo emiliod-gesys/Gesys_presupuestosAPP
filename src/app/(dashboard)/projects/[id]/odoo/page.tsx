@@ -52,7 +52,7 @@ export default async function ProjectOdooPage({ params }: { params: Promise<{ id
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-[#714B67]/20 bg-[#714B67]/5 px-4 py-3">
+      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-[#875A7B]/20 bg-[#875A7B]/5 px-4 py-3">
         <Image src="/branding/odoo-logo.svg" alt="Odoo" width={88} height={28} className="h-7 w-auto" />
         <div>
           <h2 className="text-sm font-semibold text-gray-900">Importación Odoo</h2>

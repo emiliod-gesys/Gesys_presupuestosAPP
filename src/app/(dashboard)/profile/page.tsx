@@ -213,7 +213,7 @@ export default function ProfilePage() {
       </Card>
 
       {/* Odoo */}
-      <Card className="border-l-4 border-l-[#714B67]">
+      <Card className="border-l-4 border-l-[#875A7B]">
         <CardHeader>
           <div className="flex flex-wrap items-center gap-3">
             <Image
@@ -269,7 +269,7 @@ export default function ProfilePage() {
                 : undefined
             }
           />
-          <Button onClick={saveOdooLink} loading={odooLoading} variant="outline" className="w-full border-[#714B67]/40 text-[#5c3d56] hover:bg-[#714B67]/5">
+          <Button onClick={saveOdooLink} loading={odooLoading} variant="outline" className="w-full border-[#875A7B]/40 text-[#5b4a5c] hover:bg-[#875A7B]/5">
             Guardar vinculación Odoo
           </Button>
         </CardContent>

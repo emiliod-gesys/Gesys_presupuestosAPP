@@ -276,7 +276,7 @@ export function OdooImportPanel({
       <Card>
         <CardHeader>
           <div className="flex flex-wrap items-center gap-2">
-            <Receipt className="h-5 w-5 text-[#714B67]" />
+            <Receipt className="h-5 w-5 text-[#875A7B]" />
             <h2 className="text-sm font-semibold text-gray-900">Documentos contables → Transacciones</h2>
           </div>
           <p className="text-xs text-gray-500">
@@ -291,7 +291,7 @@ export function OdooImportPanel({
                 key={d.id}
                 className={cn(
                   "flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1.5 text-xs",
-                  kinds.has(d.id) ? "border-[#714B67] bg-[#714B67]/5 text-[#5c3d56]" : "border-gray-200 text-gray-600"
+                  kinds.has(d.id) ? "border-[#875A7B] bg-[#875A7B]/5 text-[#5b4a5c]" : "border-gray-200 text-gray-600"
                 )}
               >
                 <input
@@ -313,7 +313,7 @@ export function OdooImportPanel({
               onClick={importDocuments}
               loading={importing}
               disabled={!canImport || selectedDocs.size === 0}
-              className="bg-[#714B67] hover:bg-[#5c3d56]"
+              className="bg-[#875A7B] hover:bg-[#6d4f62]"
             >
               Importar seleccionadas como transacciones
             </Button>
