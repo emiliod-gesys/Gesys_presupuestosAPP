@@ -28,6 +28,14 @@ create table if not exists user_odoo_settings (
   updated_at timestamptz default now() not null
 );
 
+create table if not exists user_sat_gt_settings (
+  user_id uuid references profiles(id) on delete cascade primary key,
+  nit text,
+  portal_login text,
+  portal_password text,
+  updated_at timestamptz default now() not null
+);
+
 create table if not exists companions (
   id uuid default gen_random_uuid() primary key,
   user_id uuid references profiles(id) on delete cascade not null,
@@ -287,6 +295,7 @@ grant execute on function public.delete_project_as_admin(uuid) to authenticated;
 
 alter table profiles enable row level security;
 alter table user_odoo_settings enable row level security;
+alter table user_sat_gt_settings enable row level security;
 alter table companions enable row level security;
 alter table project_families enable row level security;
 alter table projects enable row level security;
@@ -329,6 +338,19 @@ create policy "user_odoo_settings_update_own" on user_odoo_settings
   for update to authenticated using (auth.uid() = user_id);
 
 create policy "user_odoo_settings_delete_own" on user_odoo_settings
+  for delete to authenticated using (auth.uid() = user_id);
+
+-- USER SAT GT SETTINGS (solo el propio usuario)
+create policy "user_sat_gt_settings_select_own" on user_sat_gt_settings
+  for select to authenticated using (auth.uid() = user_id);
+
+create policy "user_sat_gt_settings_insert_own" on user_sat_gt_settings
+  for insert to authenticated with check (auth.uid() = user_id);
+
+create policy "user_sat_gt_settings_update_own" on user_sat_gt_settings
+  for update to authenticated using (auth.uid() = user_id);
+
+create policy "user_sat_gt_settings_delete_own" on user_sat_gt_settings
   for delete to authenticated using (auth.uid() = user_id);
 
 -- COMPANIONS

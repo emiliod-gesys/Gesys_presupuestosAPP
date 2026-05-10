@@ -9,10 +9,11 @@ import { Select } from "@/components/ui/select"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Avatar } from "@/components/ui/avatar"
 import { useToast } from "@/components/ui/toast"
-import { Save, KeyRound, RefreshCw, Stethoscope } from "lucide-react"
-import type { Profile, UserOdooSettings } from "@/lib/types"
+import { Save, KeyRound, RefreshCw, Stethoscope, Landmark } from "lucide-react"
+import type { Profile, UserOdooSettings, UserSatGtSettings } from "@/lib/types"
 import type { OdooDiagnosticResult } from "@/lib/odoo/diagnostic"
 import { isOdooPublicCloudUrl } from "@/lib/odoo/client"
+import { isValidGtNitFormat, normalizeGtNit } from "@/lib/sat-gt/nit"
 
 export default function ProfilePage() {
   const { toast } = useToast()
@@ -33,6 +34,12 @@ export default function ProfilePage() {
   const [odooCompaniesLoading, setOdooCompaniesLoading] = useState(false)
   const [odooDiagLoading, setOdooDiagLoading] = useState(false)
   const [odooDiagReport, setOdooDiagReport] = useState<OdooDiagnosticResult | null>(null)
+  const [satNit, setSatNit] = useState("")
+  const [satPortalLogin, setSatPortalLogin] = useState("")
+  const [satPortalPassword, setSatPortalPassword] = useState("")
+  const [hasStoredSatPassword, setHasStoredSatPassword] = useState(false)
+  const [satLoading, setSatLoading] = useState(false)
+  const [satValidateLoading, setSatValidateLoading] = useState(false)
 
   const fetchProfileOdooCompanies = useCallback(async (opts?: { announce?: boolean }) => {
     setOdooCompaniesLoading(true)
@@ -95,6 +102,17 @@ export default function ProfilePage() {
         if (o.odoo_url?.trim() && o.odoo_login?.trim() && o.odoo_password) {
           await fetchProfileOdooCompanies()
         }
+      }
+      const { data: sat } = await supabase
+        .from("user_sat_gt_settings")
+        .select("nit, portal_login, portal_password")
+        .eq("user_id", user.id)
+        .maybeSingle()
+      if (sat) {
+        const s = sat as UserSatGtSettings
+        setSatNit(s.nit || "")
+        setSatPortalLogin(s.portal_login || "")
+        setHasStoredSatPassword(!!s.portal_password)
       }
     }
     load()
@@ -215,6 +233,97 @@ export default function ProfilePage() {
       }
     }
     setOdooLoading(false)
+  }
+
+  const saveSatGtLink = async () => {
+    if (!profile) return
+    const supabase = createClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user) return
+
+    const nitNorm = normalizeGtNit(satNit)
+    if (!isValidGtNitFormat(nitNorm)) {
+      toast("error", "Indica un NIT válido (solo números, entre 4 y 15 dígitos).")
+      return
+    }
+
+    const passTrim = satPortalPassword.trim()
+    const loginTrim = satPortalLogin.trim() || nitNorm
+
+    setSatLoading(true)
+    const { data: existing } = await supabase
+      .from("user_sat_gt_settings")
+      .select("user_id")
+      .eq("user_id", user.id)
+      .maybeSingle()
+
+    const updatedAt = new Date().toISOString()
+
+    if (existing) {
+      const patch: {
+        nit: string
+        portal_login: string
+        updated_at: string
+        portal_password?: string
+      } = {
+        nit: nitNorm,
+        portal_login: loginTrim,
+        updated_at: updatedAt,
+      }
+      if (passTrim) patch.portal_password = passTrim
+      const { error } = await supabase.from("user_sat_gt_settings").update(patch).eq("user_id", user.id)
+      if (error) {
+        toast("error", "No se pudo guardar SAT. ¿Ejecutaste la migración SQL (user_sat_gt_settings) en Supabase?")
+      } else {
+        toast("success", "Vinculación SAT guardada")
+        setSatNit(nitNorm)
+        if (passTrim) setHasStoredSatPassword(true)
+        setSatPortalPassword("")
+      }
+    } else {
+      if (!passTrim) {
+        toast("error", "Indica la contraseña del portal SAT la primera vez que guardas")
+        setSatLoading(false)
+        return
+      }
+      const { error } = await supabase.from("user_sat_gt_settings").insert({
+        user_id: user.id,
+        nit: nitNorm,
+        portal_login: loginTrim,
+        portal_password: passTrim,
+        updated_at: updatedAt,
+      })
+      if (error) {
+        toast("error", "No se pudo guardar SAT. ¿Ejecutaste la migración SQL en Supabase?")
+      } else {
+        toast("success", "Vinculación SAT guardada")
+        setHasStoredSatPassword(true)
+        setSatPortalPassword("")
+        setSatNit(nitNorm)
+      }
+    }
+    setSatLoading(false)
+  }
+
+  const runSatValidate = async () => {
+    if (!hasStoredSatPassword) {
+      toast("error", "Guarda primero NIT y contraseña del portal SAT.")
+      return
+    }
+    setSatValidateLoading(true)
+    try {
+      const res = await fetch("/api/sat-gt/validate", { method: "POST" })
+      const data = await res.json()
+      if (!res.ok) {
+        toast("error", data.message || "Error al validar")
+        return
+      }
+      toast("success", data.message || "Datos correctos")
+    } finally {
+      setSatValidateLoading(false)
+    }
   }
 
   const persistProfileOdooCompany = async (next: string) => {
@@ -461,6 +570,92 @@ export default function ProfilePage() {
               </div>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* SAT Guatemala */}
+      <Card className="border-l-4 border-l-emerald-700/80">
+        <CardHeader>
+          <div className="flex flex-wrap items-center gap-2">
+            <Landmark className="h-5 w-5 text-emerald-800" />
+            <h2 className="text-sm font-semibold text-gray-900">SAT Guatemala (portal)</h2>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-xs text-gray-500 leading-relaxed">
+            Guarda el NIT y las credenciales con las que entras al{" "}
+            <a
+              href="https://portal.sat.gob.gt/portal/"
+              className="text-indigo-600 hover:underline"
+              target="_blank"
+              rel="noreferrer"
+            >
+              portal del SAT
+            </a>{" "}
+            para habilitar en el futuro la descarga de DTE emitidos y recibidos. El régimen FEL y los certificadores tienen{" "}
+            <a
+              href="https://portal.sat.gob.gt/portal/documentacion-tecnica-del-regimen-fel/"
+              className="text-indigo-600 hover:underline"
+              target="_blank"
+              rel="noreferrer"
+            >
+              documentación técnica oficial
+            </a>
+            ; no existe un API público único como Odoo, así que la sincronización automática se irá integrando por fases
+            (portal o certificador autorizado).
+          </p>
+          <Input
+            label="NIT (sin guiones o con guiones)"
+            value={satNit}
+            onChange={(e) => setSatNit(e.target.value)}
+            placeholder="Ej. 123456789"
+            inputMode="numeric"
+            autoComplete="off"
+          />
+          <Input
+            label="Usuario del portal (opcional)"
+            value={satPortalLogin}
+            onChange={(e) => setSatPortalLogin(e.target.value)}
+            placeholder="Si lo dejas vacío, usamos el NIT como usuario"
+            helperText="Algunos accesos usan correo u otro identificador distinto al NIT."
+          />
+          <Input
+            label="Contraseña del portal SAT"
+            type="password"
+            autoComplete="new-password"
+            value={satPortalPassword}
+            onChange={(e) => setSatPortalPassword(e.target.value)}
+            placeholder={hasStoredSatPassword ? "Dejar en blanco para no cambiarla" : "Contraseña del portal"}
+            helperText={
+              hasStoredSatPassword
+                ? "Ya hay una contraseña guardada. Escribe una nueva solo si quieres reemplazarla."
+                : undefined
+            }
+          />
+          <Button
+            onClick={saveSatGtLink}
+            loading={satLoading}
+            variant="outline"
+            className="w-full border-emerald-800/30 text-emerald-900 hover:bg-emerald-50"
+          >
+            Guardar vinculación SAT
+          </Button>
+          <div className="space-y-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void runSatValidate()}
+              loading={satValidateLoading}
+              disabled={!satNit.trim() || !hasStoredSatPassword}
+              className="w-full border-gray-300 text-gray-800"
+            >
+              Comprobar datos guardados
+            </Button>
+            <p className="text-xs text-gray-500">
+              Verifica NIT y que exista contraseña en el servidor. La descarga masiva de facturas se conectará en una siguiente
+              versión.
+            </p>
+          </div>
         </CardContent>
       </Card>
 

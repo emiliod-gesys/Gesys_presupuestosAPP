@@ -26,6 +26,15 @@ export interface UserOdooSettings {
   updated_at: string
 }
 
+/** Credenciales portal SAT Guatemala / futura sync FEL (tabla `user_sat_gt_settings`, RLS solo propietario). */
+export interface UserSatGtSettings {
+  user_id: string
+  nit: string | null
+  portal_login: string | null
+  portal_password: string | null
+  updated_at: string
+}
+
 export interface Companion {
   id: string
   user_id: string
