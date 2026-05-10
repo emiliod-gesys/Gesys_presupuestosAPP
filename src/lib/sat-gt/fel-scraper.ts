@@ -3,31 +3,52 @@ import { fetchFelConsultaDte, fetchFelZipXmlLines, type FelXmlConverted } from "
 import { extractConsultaDteList, normalizeSatDteRecord } from "./fel-rows"
 import type { SatDteListRow } from "./fel-types"
 
-/** Vercel / Lambda: Chromium empaquetado (@sparticuz/chromium). Local: Puppeteer con su Chrome descargado. */
-async function launchSatBrowser(headless: boolean): Promise<Browser> {
-  const usePackaged =
-    process.env.VERCEL === "1" ||
-    Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME) ||
-    process.env.SAT_PACKAGED_CHROMIUM === "1"
+/**
+ * Entornos cloud (Vercel, Lambda, etc.) suelen usar HOME tipo /home/sbx_user… sin caché de Puppeteer.
+ * No confiar solo en VERCEL==="1" (a veces falta o difiere); @sparticuz/chromium + puppeteer-core evitan el error
+ * "Could not find Chrome".
+ */
+function shouldUsePackagedChromium(): boolean {
+  if (process.env.SAT_PACKAGED_CHROMIUM === "0") return false
+  if (process.env.SAT_PACKAGED_CHROMIUM === "1") return true
+  // Usuario fuerza Chrome del sistema (evita binario empaquetado)
+  if (process.env.PUPPETEER_EXECUTABLE_PATH?.trim()) return false
 
-  if (usePackaged) {
+  if (process.env.VERCEL) return true
+  if (process.env.AWS_EXECUTION_ENV) return true
+  if (process.env.AWS_LAMBDA_FUNCTION_NAME) return true
+  if (process.env.LAMBDA_TASK_ROOT) return true
+
+  const home = process.env.HOME ?? ""
+  if (/sbx_user/i.test(home)) return true
+
+  return false
+}
+
+/** Chromium empaquetado en serverless; local: Puppeteer con Chrome descargado por postinstall. */
+async function launchSatBrowser(headless: boolean): Promise<Browser> {
+  if (shouldUsePackagedChromium()) {
     const puppeteerCore = await import("puppeteer-core")
-    const chromium = (await import("@sparticuz/chromium")).default
+    const chromiumMod = await import("@sparticuz/chromium")
+    const chromium = chromiumMod.default ?? chromiumMod
     if (typeof chromium.setGraphicsMode === "function") {
       chromium.setGraphicsMode(false)
     }
+    const executablePath = await chromium.executablePath()
     return puppeteerCore.default.launch({
       args: chromium.args,
       defaultViewport: chromium.defaultViewport,
-      executablePath: await chromium.executablePath(),
+      executablePath,
       headless: headless ? chromium.headless : false,
     })
   }
 
   const puppeteer = await import("puppeteer")
+  const execPath = process.env.PUPPETEER_EXECUTABLE_PATH?.trim()
   return puppeteer.default.launch({
     headless,
     args: ["--no-sandbox", "--disable-setuid-sandbox"],
+    ...(execPath ? { executablePath: execPath } : {}),
   })
 }
 
