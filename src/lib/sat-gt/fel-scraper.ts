@@ -25,15 +25,22 @@ function shouldUsePackagedChromium(): boolean {
   return false
 }
 
+/** API mínima de @sparticuz/chromium (los .d.ts no siempre exponen default + CJS bien). */
+type SparticuzChromium = {
+  args: string[]
+  defaultViewport: import("puppeteer-core").Viewport | null
+  executablePath: () => Promise<string>
+  headless: boolean | "shell" | "new"
+  setGraphicsMode?: (enabled: boolean) => void
+}
+
 /** Chromium empaquetado en serverless; local: Puppeteer con Chrome descargado por postinstall. */
 async function launchSatBrowser(headless: boolean): Promise<Browser> {
   if (shouldUsePackagedChromium()) {
     const puppeteerCore = await import("puppeteer-core")
     const chromiumMod = await import("@sparticuz/chromium")
-    const chromium = chromiumMod.default ?? chromiumMod
-    if (typeof chromium.setGraphicsMode === "function") {
-      chromium.setGraphicsMode(false)
-    }
+    const chromium = (chromiumMod.default ?? chromiumMod) as SparticuzChromium
+    chromium.setGraphicsMode?.(false)
     const executablePath = await chromium.executablePath()
     return puppeteerCore.default.launch({
       args: chromium.args,
