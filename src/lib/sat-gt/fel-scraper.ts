@@ -1,18 +1,8 @@
 import type { Browser, Page } from "puppeteer"
-import puppeteer from "puppeteer-extra"
-import StealthPlugin from "puppeteer-extra-plugin-stealth"
+import puppeteer from "puppeteer"
 import { fetchFelConsultaDte, fetchFelZipXmlLines, type FelXmlConverted } from "./fel-api"
 import { extractConsultaDteList, normalizeSatDteRecord } from "./fel-rows"
 import type { SatDteListRow } from "./fel-types"
-
-let stealthApplied = false
-
-function ensureStealthPlugin() {
-  if (!stealthApplied) {
-    puppeteer.use(StealthPlugin())
-    stealthApplied = true
-  }
-}
 
 async function getAccessTokenCookie(page: Page, timeoutMs: number) {
   const startedAt = Date.now()
@@ -59,7 +49,9 @@ function attachLineSummaries(rows: Record<string, unknown>[], xmlRows: FelXmlCon
 
 /**
  * Inicia sesión en farm3.sat.gob.gt, abre Consultar DTE y obtiene token/cookies para felcons.
- * Requiere Node con Chromium (Puppeteer); no apto para edge/serverless sin Chromium empaquetado.
+ * Usa Puppeteer estándar (sin puppeteer-extra/stealth) para evitar dependencias transitivas
+ * que el file tracing de Vercel no empaqueta bien (p. ej. is-plain-object vía merge-deep).
+ * Requiere Node con Chromium; en serverless puede fallar por tamaño o políticas del host.
  */
 export async function runSatFelExtraction(opts: {
   portalLogin: string
@@ -72,7 +64,6 @@ export async function runSatFelExtraction(opts: {
   const password = opts.portalPassword
   if (!username || !password) throw new Error("Faltan usuario o contraseña del portal SAT.")
 
-  ensureStealthPlugin()
   const headless = process.env.SAT_PUPPETEER_HEADLESS?.toLowerCase() !== "false"
   let browser: Browser | null = await puppeteer.launch({
     headless,

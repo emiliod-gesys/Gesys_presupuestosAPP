@@ -9,12 +9,9 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "is-plain-object": "^2.0.4",
     "axios": "^1.7.9",
     "jszip": "^3.10.1",
     "puppeteer": "^24.15.0",
-    "puppeteer-extra": "^3.3.6",
-    "puppeteer-extra-plugin-stealth": "^2.11.2",
     "xml2js": "^0.6.2",
     "@hookform/resolvers": "^5.2.2",
     "@radix-ui/react-avatar": "^1.1.11",
