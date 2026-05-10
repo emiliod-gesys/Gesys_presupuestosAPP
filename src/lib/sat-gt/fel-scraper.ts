@@ -34,6 +34,17 @@ type SparticuzChromium = {
   setGraphicsMode?: (enabled: boolean) => void
 }
 
+/** puppeteer-core (esta versión) no admite headless: "new"; @sparticuz/chromium a veces lo devuelve. */
+function headlessForPuppeteerCore(
+  wantHeadless: boolean,
+  chromiumHeadless: boolean | "shell" | "new"
+): boolean | "shell" | undefined {
+  if (!wantHeadless) return false
+  if (chromiumHeadless === "new") return true
+  if (chromiumHeadless === false) return true
+  return chromiumHeadless
+}
+
 /** Chromium empaquetado en serverless; local: Puppeteer con Chrome descargado por postinstall. */
 async function launchSatBrowser(headless: boolean): Promise<Browser> {
   if (shouldUsePackagedChromium()) {
@@ -46,7 +57,7 @@ async function launchSatBrowser(headless: boolean): Promise<Browser> {
       args: chromium.args,
       defaultViewport: chromium.defaultViewport,
       executablePath,
-      headless: headless ? chromium.headless : false,
+      headless: headlessForPuppeteerCore(headless, chromium.headless),
     })
   }
 
