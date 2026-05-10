@@ -1,6 +1,8 @@
 import type { UserOdooSettings } from "@/lib/types"
 import {
   buildOdooDatabaseCandidates,
+  fetchDbHintsFromLoginAssetBundles,
+  isOdooPublicCloudUrl,
   normalizeOdooBaseUrl,
   odooAuthenticateWithDbCandidates,
   odooFetchWebLoginHtml,
@@ -21,6 +23,7 @@ export type OdooDiagnosticResult = {
   dbListRpc: string[]
   loginHtmlBytes: number
   hintsFromLoginHtml: string[]
+  hintsFromAssetBundles: string[]
   dbCandidates: string[] | null
   authenticated: { db: string; uid: number } | null
   companiesSample: { id: number; name: string }[]
@@ -59,6 +62,7 @@ export async function runOdooConnectionDiagnostic(
       dbListRpc: [],
       loginHtmlBytes: 0,
       hintsFromLoginHtml: [],
+      hintsFromAssetBundles: [],
       dbCandidates: null,
       authenticated: null,
       companiesSample: [],
@@ -88,6 +92,7 @@ export async function runOdooConnectionDiagnostic(
 
   let html = ""
   let hints: string[] = []
+  let hintsBundles: string[] = []
   try {
     html = await odooFetchWebLoginHtml(baseUrl)
     hints = parseDbHintsFromLoginHtml(html)
@@ -99,6 +104,22 @@ export async function runOdooConnectionDiagnostic(
     )
   } catch (e) {
     pushStep(steps, "web_login_page", false, e instanceof Error ? e.message : String(e))
+  }
+
+  if (html.length > 0 && isOdooPublicCloudUrl(urlRaw)) {
+    try {
+      hintsBundles = await fetchDbHintsFromLoginAssetBundles(baseUrl, html)
+      pushStep(
+        steps,
+        "web_login_asset_bundles",
+        true,
+        hintsBundles.length > 0
+          ? `Pistas en JS /web/assets: ${hintsBundles.join(" → ")}`
+          : "(sin coincidencias en hasta 5 scripts; el nombre de base puede no estar en texto plano)"
+      )
+    } catch (e) {
+      pushStep(steps, "web_login_asset_bundles", false, e instanceof Error ? e.message : String(e))
+    }
   }
 
   let dbCandidates: string[] | null = null
@@ -153,6 +174,7 @@ export async function runOdooConnectionDiagnostic(
     dbListRpc,
     loginHtmlBytes: html.length,
     hintsFromLoginHtml: hints,
+    hintsFromAssetBundles: hintsBundles,
     dbCandidates,
     authenticated,
     companiesSample,

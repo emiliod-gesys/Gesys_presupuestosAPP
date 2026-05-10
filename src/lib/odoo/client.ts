@@ -50,18 +50,34 @@ export async function odooListDatabases(baseUrl: string): Promise<string[]> {
   return []
 }
 
+const DB_NAME_BLOCKLIST = new Set([
+  "null",
+  "true",
+  "false",
+  "default",
+  "web",
+  "login",
+  "odoo",
+  "http",
+  "https",
+  "json",
+  "rpc",
+  "xml",
+])
+
 /** Nombres de base plausibles (PostgreSQL / Odoo típico). */
 function isLikelyOdooDbName(s: string): boolean {
-  if (s.length < 1 || s.length > 128) return false
-  return /^[\w.-]+$/.test(s)
+  if (s.length < 2 || s.length > 128) return false
+  if (!/^[\w.-]+$/.test(s)) return false
+  if (DB_NAME_BLOCKLIST.has(s.toLowerCase())) return false
+  return true
 }
 
 /**
- * Odoo SaaS suele renderizar SPA: el nombre de base puede estar en bundles (`"db":"…"`),
- * `dbname`, campo oculto o data-db.
+ * Extrae posibles nombres de base desde HTML o JS (bundles minificados de `/web/login`).
  */
-export function parseDbHintsFromLoginHtml(html: string): string[] {
-  const slice = html.length > 900_000 ? html.slice(0, 900_000) : html
+export function parseDbHintsFromText(text: string, maxLen = 900_000): string[] {
+  const slice = text.length > maxLen ? text.slice(0, maxLen) : text
   const out: string[] = []
   const seen = new Set<string>()
   const add = (raw: string | undefined) => {
@@ -77,9 +93,10 @@ export function parseDbHintsFromLoginHtml(html: string): string[] {
     /name=["']db["'][^>]*value=["']([^"']*)["']/i,
     /value=["']([^"']*)["'][^>]*name=["']db["']/i,
     /data-db=["']([^"']*)["']/i,
-    /<input[^>]+name=["']db["'][^>]+>/gi,
+    /data-db-name=["']([^"']*)["']/i,
+    /data-database=["']([^"']*)["']/i,
   ]
-  for (const re of inputPatterns.slice(0, 3)) {
+  for (const re of inputPatterns) {
     const m = slice.match(re)
     if (m?.[1]) add(m[1])
   }
@@ -87,10 +104,19 @@ export function parseDbHintsFromLoginHtml(html: string): string[] {
   for (const m of slice.matchAll(/"db"\s*:\s*"([^"\\]{1,128})"/gi)) {
     if (m[1]) add(m[1])
   }
+  for (const m of slice.matchAll(/'db'\s*:\s*'([^'\\]{1,128})'/gi)) {
+    if (m[1]) add(m[1])
+  }
   for (const m of slice.matchAll(/"dbname"\s*:\s*"([^"\\]{1,128})"/gi)) {
     if (m[1]) add(m[1])
   }
   for (const m of slice.matchAll(/\bdbname\s*:\s*'([^']{1,128})'/gi)) {
+    if (m[1]) add(m[1])
+  }
+  for (const m of slice.matchAll(/\bdb\s*=\s*["']([^"']{1,128})["']/gi)) {
+    if (m[1]) add(m[1])
+  }
+  for (const m of slice.matchAll(/\bdatabase\s*:\s*["']([^"']{1,128})["']/gi)) {
     if (m[1]) add(m[1])
   }
 
@@ -104,6 +130,62 @@ export function parseDbHintsFromLoginHtml(html: string): string[] {
   }
 
   return out
+}
+
+/** @alias parseDbHintsFromText */
+export function parseDbHintsFromLoginHtml(html: string): string[] {
+  return parseDbHintsFromText(html)
+}
+
+/**
+ * Odoo 17+ SPA: el nombre real de la base a veces solo aparece en JS de `/web/assets/...`.
+ */
+export async function fetchDbHintsFromLoginAssetBundles(
+  baseUrl: string,
+  loginHtml: string
+): Promise<string[]> {
+  const root = normalizeOdooBaseUrl(baseUrl)
+  const scriptSrcs = [...loginHtml.matchAll(/<script[^>]+src=["']([^"']+)["']/gi)]
+    .map((m) => m[1])
+    .filter((src) => /\/web\/assets\/|\/web\/static\//i.test(src))
+    .slice(0, 5)
+
+  const merged: string[] = []
+  const seen = new Set<string>()
+  const pushAll = (arr: string[]) => {
+    for (const x of arr) {
+      const k = x.toLowerCase()
+      if (seen.has(k)) continue
+      seen.add(k)
+      merged.push(x)
+    }
+  }
+
+  const signal =
+    typeof AbortSignal !== "undefined" && "timeout" in AbortSignal
+      ? AbortSignal.timeout(22_000)
+      : undefined
+
+  for (const src of scriptSrcs) {
+    try {
+      const abs = src.startsWith("http") ? src : new URL(src, `${root}/`).toString()
+      const res = await fetch(abs, {
+        method: "GET",
+        headers: { Accept: "*/*" },
+        cache: "no-store",
+        signal,
+      })
+      if (!res.ok) continue
+      const buf = await res.arrayBuffer()
+      const max = 900_000
+      const slice = buf.byteLength > max ? buf.slice(0, max) : buf
+      const text = new TextDecoder().decode(slice)
+      pushAll(parseDbHintsFromText(text))
+    } catch {
+      /* siguiente bundle */
+    }
+  }
+  return merged
 }
 
 /** HTML de `/web/login` (útil para diagnóstico y extracción de pistas de nombre de base). */
@@ -156,6 +238,9 @@ function authLooksLikeWrongDatabase(msg: string): boolean {
   if (/wrong database/i.test(m) || /unknown database/i.test(m)) return true
   if (/no existe la base/i.test(m)) return true
   if (/\b5432\b/.test(msg)) return true
+  /* Odoo SaaS: subdominio ≠ nombre PostgreSQL → KeyError en registry */
+  if (/keyerror:\s*['"][\w.-]+['"]/i.test(msg)) return true
+  if (/keyerror/i.test(m) && /registr(y|ies)/i.test(msg)) return true
   return false
 }
 
@@ -191,7 +276,25 @@ export async function buildOdooDatabaseCandidates(
   } catch {
     /* sin HTML */
   }
-  const hints = parseDbHintsFromLoginHtml(html)
+  const htmlHints = parseDbHintsFromLoginHtml(html)
+  let hints = [...htmlHints]
+  if (isOdooPublicCloudUrl(odooUrl) && html.length > 0) {
+    try {
+      const fromBundles = await fetchDbHintsFromLoginAssetBundles(baseUrl, html)
+      const seen = new Set(hints.map((h) => h.toLowerCase()))
+      const prep: string[] = []
+      for (const b of fromBundles) {
+        const k = b.toLowerCase()
+        if (seen.has(k)) continue
+        seen.add(k)
+        prep.push(b)
+      }
+      /* Bundles suelen llevar el nombre PostgreSQL real antes que el subdominio */
+      hints = [...prep, ...hints]
+    } catch {
+      /* sin bundles */
+    }
+  }
 
   const ordered: string[] = []
   const seen = new Set<string>()
@@ -294,6 +397,16 @@ export function formatOdooUserFacingError(err: unknown, opts?: OdooUserFacingErr
   const cloud = isOdooPublicCloudUrl(opts?.odooUrl)
   const loginLooksAdmin = opts?.odooLogin?.trim().toLowerCase() === "admin"
 
+  if (
+    /keyerror:\s*['"][\w.-]+['"]/i.test(raw) ||
+    (/keyerror/i.test(lower) && /registry/i.test(lower))
+  ) {
+    return (
+      "Odoo no tiene registrada una base con el nombre que enviamos (en SaaS el subdominio puede no coincidir con el nombre PostgreSQL). " +
+      "Rellena «Base de datos Odoo» en el perfil con el nombre técnico real: en el navegador, F12 → pestaña Red, inicia sesión y busca el campo `db` en el cuerpo de la petición (p. ej. a /web/session/authenticate). " +
+      "Si no aparece, confirma el nombre con el administrador de la instancia o con soporte Odoo."
+    )
+  }
   if (/fatal:\s*database/i.test(raw) && /does not exist/i.test(raw)) {
     let out =
       "Odoo respondió que no existe esa base de datos en su PostgreSQL interno (nombre distinto al que probamos o instancia mal enlazada). " +

@@ -351,7 +351,8 @@ export default function ProfilePage() {
             placeholder="Dejar vacío en nombre.odoo.com salvo que te indiquen otro nombre"
             helperText={
               "En URLs nombre.odoo.com suele bastar dejarlo vacío (usamos el subdominio). " +
-              "Rellenarlo mal puede provocar errores al cargar empresas. En servidor propio debe coincidir con la base PostgreSQL de Odoo."
+              "Si el diagnóstico muestra KeyError con el subdominio, el nombre PostgreSQL es otro: rellena aquí el valor del parámetro `db` que ves en la red del navegador al iniciar sesión. " +
+              "En servidor propio debe coincidir con la base interna de Odoo."
             }
           />
           <Input
