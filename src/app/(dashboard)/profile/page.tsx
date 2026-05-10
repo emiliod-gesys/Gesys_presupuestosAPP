@@ -9,7 +9,7 @@ import { Select } from "@/components/ui/select"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Avatar } from "@/components/ui/avatar"
 import { useToast } from "@/components/ui/toast"
-import { Save, KeyRound, RefreshCw, Stethoscope, Landmark } from "lucide-react"
+import { Save, KeyRound, RefreshCw, Stethoscope } from "lucide-react"
 import type { Profile, UserOdooSettings, UserSatGtSettings } from "@/lib/types"
 import type { OdooDiagnosticResult } from "@/lib/odoo/diagnostic"
 import { isOdooPublicCloudUrl } from "@/lib/odoo/client"
@@ -576,8 +576,14 @@ export default function ProfilePage() {
       {/* SAT Guatemala */}
       <Card className="border-l-4 border-l-emerald-700/80">
         <CardHeader>
-          <div className="flex flex-wrap items-center gap-2">
-            <Landmark className="h-5 w-5 text-emerald-800" />
+          <div className="flex flex-wrap items-center gap-3">
+            <Image
+              src="/branding/sat-guatemala-logo.png"
+              alt="Superintendencia de Administración Tributaria — SAT Guatemala"
+              width={260}
+              height={72}
+              className="h-11 w-auto max-w-[min(100%,280px)] object-contain object-left"
+            />
             <h2 className="text-sm font-semibold text-gray-900">SAT Guatemala (portal)</h2>
           </div>
         </CardHeader>
