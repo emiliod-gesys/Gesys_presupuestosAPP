@@ -39,7 +39,7 @@ async function launchSatBrowser(headless: boolean): Promise<Browser> {
   if (shouldUsePackagedChromium()) {
     const puppeteerCore = await import("puppeteer-core")
     const chromiumMod = await import("@sparticuz/chromium")
-    const chromium = (chromiumMod.default ?? chromiumMod) as SparticuzChromium
+    const chromium = (chromiumMod.default ?? chromiumMod) as unknown as SparticuzChromium
     chromium.setGraphicsMode?.(false)
     const executablePath = await chromium.executablePath()
     return puppeteerCore.default.launch({
