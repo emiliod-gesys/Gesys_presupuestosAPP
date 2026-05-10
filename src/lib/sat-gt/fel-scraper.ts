@@ -1,8 +1,35 @@
-import type { Browser, Page } from "puppeteer"
-import puppeteer from "puppeteer"
+import type { Browser, Page } from "puppeteer-core"
 import { fetchFelConsultaDte, fetchFelZipXmlLines, type FelXmlConverted } from "./fel-api"
 import { extractConsultaDteList, normalizeSatDteRecord } from "./fel-rows"
 import type { SatDteListRow } from "./fel-types"
+
+/** Vercel / Lambda: Chromium empaquetado (@sparticuz/chromium). Local: Puppeteer con su Chrome descargado. */
+async function launchSatBrowser(headless: boolean): Promise<Browser> {
+  const usePackaged =
+    process.env.VERCEL === "1" ||
+    Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME) ||
+    process.env.SAT_PACKAGED_CHROMIUM === "1"
+
+  if (usePackaged) {
+    const puppeteerCore = await import("puppeteer-core")
+    const chromium = (await import("@sparticuz/chromium")).default
+    if (typeof chromium.setGraphicsMode === "function") {
+      chromium.setGraphicsMode(false)
+    }
+    return puppeteerCore.default.launch({
+      args: chromium.args,
+      defaultViewport: chromium.defaultViewport,
+      executablePath: await chromium.executablePath(),
+      headless: headless ? chromium.headless : false,
+    })
+  }
+
+  const puppeteer = await import("puppeteer")
+  return puppeteer.default.launch({
+    headless,
+    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+  })
+}
 
 async function getAccessTokenCookie(page: Page, timeoutMs: number) {
   const startedAt = Date.now()
@@ -49,9 +76,8 @@ function attachLineSummaries(rows: Record<string, unknown>[], xmlRows: FelXmlCon
 
 /**
  * Inicia sesión en farm3.sat.gob.gt, abre Consultar DTE y obtiene token/cookies para felcons.
- * Usa Puppeteer estándar (sin puppeteer-extra/stealth) para evitar dependencias transitivas
- * que el file tracing de Vercel no empaqueta bien (p. ej. is-plain-object vía merge-deep).
- * Requiere Node con Chromium; en serverless puede fallar por tamaño o políticas del host.
+ * En Vercel/Lambda usa @sparticuz/chromium + puppeteer-core; en local usa el paquete puppeteer
+ * (Chrome descargado por postinstall / npx puppeteer browsers install chrome).
  */
 export async function runSatFelExtraction(opts: {
   portalLogin: string
@@ -65,10 +91,7 @@ export async function runSatFelExtraction(opts: {
   if (!username || !password) throw new Error("Faltan usuario o contraseña del portal SAT.")
 
   const headless = process.env.SAT_PUPPETEER_HEADLESS?.toLowerCase() !== "false"
-  let browser: Browser | null = await puppeteer.launch({
-    headless,
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
-  })
+  let browser: Browser | null = await launchSatBrowser(headless)
 
   let token: string
   let cookieHeader: string

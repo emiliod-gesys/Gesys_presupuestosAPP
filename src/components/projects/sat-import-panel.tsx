@@ -197,8 +197,10 @@ export function SatImportPanel({
             <Input label="Hasta" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
           </div>
           <p className="text-xs text-amber-800 bg-amber-50/80 rounded-lg px-3 py-2 border border-amber-100">
-            Despliega la app en un servidor Node con Chromium (por ejemplo VPS o contenedor), no en serverless sin
-            Puppeteer. Variable opcional: <code className="text-[11px]">SAT_PUPPETEER_HEADLESS=false</code> para depurar.
+            En Vercel/AWS Lambda se usa Chromium empaquetado (@sparticuz/chromium). En tu PC hace falta Chrome instalado vía
+            Puppeteer (<code className="text-[11px]">npx puppeteer browsers install chrome</code> si falla). Opcional:{" "}
+            <code className="text-[11px]">SAT_PUPPETEER_HEADLESS=false</code> o{" "}
+            <code className="text-[11px]">SAT_PACKAGED_CHROMIUM=1</code> para forzar el binario empaquetado.
           </p>
         </CardContent>
       </Card>
