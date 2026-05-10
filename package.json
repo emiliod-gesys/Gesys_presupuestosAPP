@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "is-plain-object": "^2.0.4",
     "axios": "^1.7.9",
     "jszip": "^3.10.1",
     "puppeteer": "^24.15.0",
