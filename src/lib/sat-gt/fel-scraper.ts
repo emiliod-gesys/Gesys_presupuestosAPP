@@ -1,11 +1,10 @@
 import type { Browser, Page } from "puppeteer"
-import _puppeteer from "puppeteer-extra"
+import puppeteer from "puppeteer-extra"
 import StealthPlugin from "puppeteer-extra-plugin-stealth"
 import { fetchFelConsultaDte, fetchFelZipXmlLines, type FelXmlConverted } from "./fel-api"
 import { extractConsultaDteList, normalizeSatDteRecord } from "./fel-rows"
 import type { SatDteListRow } from "./fel-types"
 
-const puppeteer = _puppeteer.default
 let stealthApplied = false
 
 function ensureStealthPlugin() {
