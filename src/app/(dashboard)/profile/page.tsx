@@ -9,8 +9,9 @@ import { Select } from "@/components/ui/select"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Avatar } from "@/components/ui/avatar"
 import { useToast } from "@/components/ui/toast"
-import { Save, KeyRound, RefreshCw } from "lucide-react"
+import { Save, KeyRound, RefreshCw, Stethoscope } from "lucide-react"
 import type { Profile, UserOdooSettings } from "@/lib/types"
+import type { OdooDiagnosticResult } from "@/lib/odoo/diagnostic"
 import { isOdooPublicCloudUrl } from "@/lib/odoo/client"
 
 export default function ProfilePage() {
@@ -30,6 +31,8 @@ export default function ProfilePage() {
   const [odooCompanyId, setOdooCompanyId] = useState("")
   const [odooCompanies, setOdooCompanies] = useState<{ id: number; name: string }[]>([])
   const [odooCompaniesLoading, setOdooCompaniesLoading] = useState(false)
+  const [odooDiagLoading, setOdooDiagLoading] = useState(false)
+  const [odooDiagReport, setOdooDiagReport] = useState<OdooDiagnosticResult | null>(null)
 
   const fetchProfileOdooCompanies = useCallback(async (opts?: { announce?: boolean }) => {
     setOdooCompaniesLoading(true)
@@ -234,6 +237,31 @@ export default function ProfilePage() {
     toast("success", "Empresa Odoo predeterminada guardada")
   }
 
+  const runOdooDiagnostic = async () => {
+    if (!hasStoredOdooPassword) {
+      toast("error", "Guarda primero la vinculación con contraseña; la prueba usa lo guardado en el servidor.")
+      return
+    }
+    setOdooDiagLoading(true)
+    setOdooDiagReport(null)
+    try {
+      const res = await fetch("/api/odoo/diagnostic", { method: "POST" })
+      const data = await res.json()
+      if (!res.ok) {
+        toast("error", data.message || "No se pudo ejecutar el diagnóstico")
+        return
+      }
+      setOdooDiagReport(data.report as OdooDiagnosticResult)
+      if (data.ok) {
+        toast("success", "Conexión Odoo OK: autenticación y lectura de empresas.")
+      } else {
+        toast("error", "Falló la autenticación o la lectura; revisa el informe técnico abajo.")
+      }
+    } finally {
+      setOdooDiagLoading(false)
+    }
+  }
+
   const odooCompanyOptions = [
     { value: "", label: "Sin empresa predeterminada" },
     ...odooCompanies.map((c) => ({ value: String(c.id), label: c.name })),
@@ -368,6 +396,40 @@ export default function ProfilePage() {
           <Button onClick={saveOdooLink} loading={odooLoading} variant="outline" className="w-full border-[#875A7B]/40 text-[#5b4a5c] hover:bg-[#875A7B]/5">
             Guardar vinculación Odoo
           </Button>
+          <div className="space-y-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void runOdooDiagnostic()}
+              loading={odooDiagLoading}
+              disabled={!odooUrl.trim() || !odooLogin.trim() || !hasStoredOdooPassword}
+              className="w-full border-gray-300 text-gray-800"
+            >
+              <Stethoscope className="h-4 w-4" /> Probar conexión Odoo
+            </Button>
+            <p className="text-xs text-gray-500">
+              Ejecuta las mismas comprobaciones que la importación (JSON-RPC, candidatos de base, autenticación y una lectura de
+              empresas). Usa las credenciales <strong>ya guardadas</strong>; si cambiaste algo, pulsa «Guardar vinculación Odoo»
+              antes.
+            </p>
+          </div>
+          {odooDiagReport && (
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs">
+              <p className="font-medium text-gray-800 mb-2">Informe de diagnóstico</p>
+              <ul className="mb-3 space-y-1 text-gray-700">
+                {odooDiagReport.steps.map((s) => (
+                  <li key={s.step} className="flex flex-wrap gap-1">
+                    <span className={s.ok ? "text-emerald-700" : "text-red-700"}>{s.ok ? "✓" : "✗"}</span>
+                    <span className="font-mono text-[11px]">{s.step}</span>
+                    {s.detail && <span className="text-gray-600 break-all">— {s.detail}</span>}
+                  </li>
+                ))}
+              </ul>
+              <pre className="max-h-64 overflow-auto rounded bg-white p-2 text-[10px] leading-relaxed text-gray-800 border border-gray-100">
+                {JSON.stringify(odooDiagReport, null, 2)}
+              </pre>
+            </div>
+          )}
           {showOdooCompanyPicker && (
             <div className="space-y-3 rounded-lg border border-gray-100 bg-gray-50/80 p-4">
               <p className="text-xs font-medium text-gray-700">Empresa Odoo (multiempresa)</p>

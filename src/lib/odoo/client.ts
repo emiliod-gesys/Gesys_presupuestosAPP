@@ -106,7 +106,8 @@ export function parseDbHintsFromLoginHtml(html: string): string[] {
   return out
 }
 
-async function fetchOdooLoginPageHtml(baseUrl: string): Promise<string> {
+/** HTML de `/web/login` (útil para diagnóstico y extracción de pistas de nombre de base). */
+export async function odooFetchWebLoginHtml(baseUrl: string): Promise<string> {
   const root = normalizeOdooBaseUrl(baseUrl)
   const ctrl =
     typeof AbortSignal !== "undefined" && "timeout" in AbortSignal
@@ -129,7 +130,7 @@ async function fetchOdooLoginPageHtml(baseUrl: string): Promise<string> {
 /** @deprecated usar parseDbHintsFromLoginHtml; conservado por compatibilidad */
 export async function odooDatabaseFromWebLogin(baseUrl: string): Promise<string | null> {
   try {
-    const html = await fetchOdooLoginPageHtml(baseUrl)
+    const html = await odooFetchWebLoginHtml(baseUrl)
     const hints = parseDbHintsFromLoginHtml(html)
     return hints[0] ?? null
   } catch {
@@ -186,7 +187,7 @@ export async function buildOdooDatabaseCandidates(
 
   let html = ""
   try {
-    html = await fetchOdooLoginPageHtml(baseUrl)
+    html = await odooFetchWebLoginHtml(baseUrl)
   } catch {
     /* sin HTML */
   }
