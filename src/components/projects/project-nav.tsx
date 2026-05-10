@@ -22,6 +22,7 @@ export function ProjectNav({ projectId, role, projectName }: ProjectNavProps) {
     { href: `${base}/reservations`, label: "Reservas" },
     { href: `${base}/transactions`, label: "Transacciones" },
     { href: `${base}/odoo`, label: "Odoo" },
+    { href: `${base}/sat`, label: "SAT" },
     { href: `${base}/members`, label: "Miembros" },
     ...(role === "admin" ? [
       { href: `${base}/alerts`, label: "Alertas" },

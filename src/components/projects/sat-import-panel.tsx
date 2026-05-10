@@ -1,0 +1,352 @@
+"use client"
+
+import { useMemo, useState } from "react"
+import Link from "next/link"
+import { useRouter } from "next/navigation"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Select } from "@/components/ui/select"
+import { useToast } from "@/components/ui/toast"
+import { formatCurrency, cn } from "@/lib/utils"
+import type { SatDteListRow } from "@/lib/sat-gt/fel-types"
+import { Download, FileSpreadsheet } from "lucide-react"
+
+type Opt = { value: string; label: string }
+
+function defaultSatDateRange() {
+  const today = new Date()
+  const start = new Date(today.getFullYear(), today.getMonth(), 1)
+  return {
+    from: start.toISOString().slice(0, 10),
+    to: today.toISOString().slice(0, 10),
+  }
+}
+
+export function SatImportPanel({
+  projectId,
+  currency,
+  categoryOptions,
+  expenseTypeOptions,
+  incomeTypeOptions,
+  canImport,
+  profileSatConfigured,
+}: {
+  projectId: string
+  currency: string
+  categoryOptions: Opt[]
+  expenseTypeOptions: Opt[]
+  incomeTypeOptions: Opt[]
+  canImport: boolean
+  profileSatConfigured: boolean
+}) {
+  const { toast } = useToast()
+  const router = useRouter()
+  const range0 = useMemo(() => defaultSatDateRange(), [])
+  const [dateFrom, setDateFrom] = useState(range0.from)
+  const [dateTo, setDateTo] = useState(range0.to)
+  const [rows, setRows] = useState<SatDteListRow[]>([])
+  const [warnings, setWarnings] = useState<string[]>([])
+  const [loading, setLoading] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [rowCategory, setRowCategory] = useState<Record<string, string>>({})
+  const [rowTxType, setRowTxType] = useState<Record<string, string>>({})
+
+  const defaultExpenseCat = categoryOptions[0]?.value ?? ""
+  const defaultIncomeCat = categoryOptions[0]?.value ?? ""
+  const defaultExpenseTx = expenseTypeOptions[0]?.value ?? ""
+  const defaultIncomeTx = incomeTypeOptions[0]?.value ?? ""
+
+  const rowKey = (r: SatDteListRow) => `${r.flow}:${r.uuid}`
+
+  const filtersReady = dateFrom.trim() !== "" && dateTo.trim() !== ""
+
+  const loadFromSat = async () => {
+    if (!filtersReady) {
+      toast("error", "Indica fecha desde y hasta")
+      return
+    }
+    setLoading(true)
+    setWarnings([])
+    try {
+      const res = await fetch(`/api/projects/${projectId}/sat/list`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dateFrom: dateFrom.trim(), dateTo: dateTo.trim() }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        toast("error", data.message || "No se pudo consultar el SAT")
+        setRows([])
+        return
+      }
+      const list = (data.rows || []) as SatDteListRow[]
+      setRows(list)
+      setWarnings(Array.isArray(data.warnings) ? data.warnings : [])
+      setSelected(new Set())
+      const cat: Record<string, string> = {}
+      const tx: Record<string, string> = {}
+      for (const r of list) {
+        const k = rowKey(r)
+        if (r.anulado) continue
+        cat[k] = r.flow === "expense" ? defaultExpenseCat : defaultIncomeCat
+        tx[k] = r.flow === "expense" ? defaultExpenseTx : defaultIncomeTx
+      }
+      setRowCategory(cat)
+      setRowTxType(tx)
+      toast("success", `${list.length} DTE en el período`)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const importSelected = async () => {
+    const keys = [...selected]
+    if (keys.length === 0) {
+      toast("error", "Selecciona al menos un DTE")
+      return
+    }
+    const items = []
+    for (const k of keys) {
+      const row = rows.find((r) => rowKey(r) === k)
+      if (!row || row.anulado) continue
+      const categoryId = rowCategory[k] || ""
+      const transactionTypeId = rowTxType[k] || ""
+      if (!categoryId || !transactionTypeId) {
+        toast("error", "Asigna categoría y tipo a todos los seleccionados")
+        return
+      }
+      items.push({
+        uuid: row.uuid,
+        flow: row.flow,
+        label: row.label,
+        name: row.name,
+        date: row.date,
+        amount: row.amount,
+        partnerName: row.partnerName,
+        categoryId,
+        transactionTypeId,
+      })
+    }
+    if (items.length === 0) return
+    setImporting(true)
+    try {
+      const res = await fetch(`/api/projects/${projectId}/sat/import-transactions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        toast("error", data.message || "Error al importar")
+        return
+      }
+      const parts = [`Importadas: ${data.imported}`]
+      if (data.skipped?.length) parts.push(`omitidas (ya existían): ${data.skipped.length}`)
+      toast("success", parts.join(". "))
+      if (Array.isArray(data.errors) && data.errors.length) {
+        toast("error", data.errors.slice(0, 3).join(" · "))
+      }
+      router.refresh()
+      setSelected(new Set())
+    } finally {
+      setImporting(false)
+    }
+  }
+
+  if (!profileSatConfigured) {
+    return (
+      <Card>
+        <CardContent className="py-10 text-center text-sm text-gray-600">
+          <p className="font-medium text-gray-900">Configura el portal SAT en tu perfil</p>
+          <p className="mt-2">Necesitas NIT, contraseña del portal y, si aplica, usuario distinto al NIT.</p>
+          <Link href="/profile" className="mt-4 inline-block text-indigo-600 hover:underline">
+            Ir a Mi perfil
+          </Link>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (categoryOptions.length === 0) {
+    return (
+      <Card>
+        <CardContent className="py-8 text-center text-sm text-gray-600">
+          Define renglones de presupuesto en la pestaña Presupuesto antes de importar DTE del SAT.
+        </CardContent>
+      </Card>
+    )
+  }
+
+  const selectableRows = rows.filter((r) => !r.anulado)
+
+  return (
+    <div className="space-y-8">
+      <Card className="border-emerald-800/15">
+        <CardHeader>
+          <h2 className="text-sm font-semibold text-gray-900">Período de consulta DTE</h2>
+          <p className="text-xs text-gray-500">
+            La extracción abre una sesión en el portal del SAT (Puppeteer) y consulta la API de consulta DTE. Puede tardar
+            uno o varios minutos según el rango y la carga del portal.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Input label="Desde" type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+            <Input label="Hasta" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+          </div>
+          <p className="text-xs text-amber-800 bg-amber-50/80 rounded-lg px-3 py-2 border border-amber-100">
+            Despliega la app en un servidor Node con Chromium (por ejemplo VPS o contenedor), no en serverless sin
+            Puppeteer. Variable opcional: <code className="text-[11px]">SAT_PUPPETEER_HEADLESS=false</code> para depurar.
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <div className="flex flex-wrap items-center gap-2">
+            <FileSpreadsheet className="h-5 w-5 text-emerald-800" />
+            <h2 className="text-sm font-semibold text-gray-900">DTE emitidos y recibidos → Transacciones</h2>
+          </div>
+          <p className="text-xs text-gray-500">
+            Emitidas se importan como ingresos; recibidas como gastos. Elige renglón y tipo antes de importar. Los DTE
+            anulados no se pueden seleccionar.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void loadFromSat()}
+              loading={loading}
+              disabled={!canImport || !filtersReady}
+              className="border-emerald-800/30"
+            >
+              <Download className="h-4 w-4" /> Extraer del SAT
+            </Button>
+            <Button
+              type="button"
+              onClick={() => void importSelected()}
+              loading={importing}
+              disabled={!canImport || selected.size === 0}
+              className="bg-emerald-800 hover:bg-emerald-900"
+            >
+              Importar seleccionadas como transacciones
+            </Button>
+          </div>
+          {!canImport && (
+            <p className="text-xs text-amber-800">
+              Solo administradores y trabajadores pueden importar (o el proyecto está archivado).
+            </p>
+          )}
+          {warnings.length > 0 && (
+            <ul className="list-inside list-disc text-xs text-amber-800">
+              {warnings.map((w, i) => (
+                <li key={i}>{w}</li>
+              ))}
+            </ul>
+          )}
+          {rows.length > 0 && (
+            <div className="overflow-x-auto rounded-lg border border-gray-200">
+              <table className="w-full min-w-[56rem] text-left text-sm">
+                <thead className="border-b border-gray-100 bg-gray-50 text-xs font-medium text-gray-500">
+                  <tr>
+                    <th className="px-3 py-2 w-10">
+                      <input
+                        type="checkbox"
+                        aria-label="Seleccionar todas"
+                        checked={
+                          selectableRows.length > 0 && selected.size === selectableRows.length
+                        }
+                        onChange={(e) => {
+                          if (e.target.checked) setSelected(new Set(selectableRows.map(rowKey)))
+                          else setSelected(new Set())
+                        }}
+                      />
+                    </th>
+                    <th className="px-3 py-2">Fecha</th>
+                    <th className="px-3 py-2">Documento / contraparte</th>
+                    <th className="px-3 py-2">Tipo</th>
+                    <th className="px-3 py-2 text-right">Monto</th>
+                    <th className="px-3 py-2">Renglón</th>
+                    <th className="px-3 py-2">Tipo transacción</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {rows.map((r) => {
+                    const k = rowKey(r)
+                    const typeOpts = r.flow === "expense" ? expenseTypeOptions : incomeTypeOptions
+                    return (
+                      <tr key={k} className={cn("hover:bg-gray-50/80", r.anulado && "opacity-60")}>
+                        <td className="px-3 py-2">
+                          <input
+                            type="checkbox"
+                            disabled={r.anulado}
+                            title={r.anulado ? "DTE anulado" : undefined}
+                            checked={selected.has(k)}
+                            onChange={(e) => {
+                              setSelected((prev) => {
+                                const n = new Set(prev)
+                                if (e.target.checked) n.add(k)
+                                else n.delete(k)
+                                return n
+                              })
+                            }}
+                          />
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap text-gray-600">{r.date || "—"}</td>
+                        <td className="px-3 py-2 min-w-[12rem]">
+                          <p className="font-medium text-gray-900">{r.name}</p>
+                          <p className="text-xs text-gray-500">{r.partnerName || "—"}</p>
+                          {r.lineSummary && (
+                            <p className="text-[11px] text-gray-400 mt-0.5 line-clamp-2">{r.lineSummary}</p>
+                          )}
+                          {r.anulado && (
+                            <span className="mt-1 inline-block rounded bg-gray-200 px-1.5 py-0.5 text-[10px] text-gray-700">
+                              Anulado
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2">
+                          <span
+                            className={cn(
+                              "rounded px-2 py-0.5 text-xs",
+                              r.flow === "expense" ? "bg-red-50 text-red-800" : "bg-emerald-50 text-emerald-800"
+                            )}
+                          >
+                            {r.label}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums">{formatCurrency(r.amount, currency)}</td>
+                        <td className="px-3 py-2 min-w-[10rem]">
+                          <Select
+                            id={`sat-import-${k}-cat`}
+                            options={categoryOptions}
+                            value={rowCategory[k] || ""}
+                            onChange={(e) => setRowCategory((prev) => ({ ...prev, [k]: e.target.value }))}
+                            className="text-xs bg-white"
+                          />
+                        </td>
+                        <td className="px-3 py-2 min-w-[10rem]">
+                          <Select
+                            id={`sat-import-${k}-tx`}
+                            options={typeOpts}
+                            value={rowTxType[k] || ""}
+                            onChange={(e) => setRowTxType((prev) => ({ ...prev, [k]: e.target.value }))}
+                            className="text-xs bg-white"
+                          />
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  )
+}

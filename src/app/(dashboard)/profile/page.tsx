@@ -623,7 +623,7 @@ export default function ProfilePage() {
             value={satPortalLogin}
             onChange={(e) => setSatPortalLogin(e.target.value)}
             placeholder="Si lo dejas vacío, usamos el NIT como usuario"
-            helperText="Algunos accesos usan correo u otro identificador distinto al NIT."
+            helperText="Mismo usuario con el que inicias sesión en farm3.sat.gob.gt (correo u otro identificador si no es el NIT). Necesario para la pestaña SAT en proyectos."
           />
           <Input
             label="Contraseña del portal SAT"
