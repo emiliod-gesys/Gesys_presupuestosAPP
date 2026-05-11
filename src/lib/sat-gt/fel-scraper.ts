@@ -1,7 +1,12 @@
 import type { Browser, Page } from "puppeteer-core"
 import { fetchFelConsultaDte, fetchFelZipXmlLines, type FelXmlConverted } from "./fel-api"
-import { extractConsultaDteList, normalizeSatDteRecord } from "./fel-rows"
-import type { SatDteListRow } from "./fel-types"
+import {
+  countNormalizedRows,
+  extractConsultaDteList,
+  felMessageFromResponse,
+  normalizeSatDteRecord,
+} from "./fel-rows"
+import type { SatDteListRow, SatFelRunDiagnostics } from "./fel-types"
 
 /**
  * Entornos cloud (Vercel, Lambda, etc.) suelen usar HOME tipo /home/sbx_user… sin caché de Puppeteer.
@@ -119,15 +124,20 @@ function attachLineSummaries(rows: Record<string, unknown>[], xmlRows: FelXmlCon
  * (Chrome descargado por postinstall / npx puppeteer browsers install chrome).
  */
 export async function runSatFelExtraction(opts: {
+  /** Usuario con el que se abre farm3 (correo o NIT). */
   portalLogin: string
+  /** Valor del query `usuario=` en consulta-dte / zip-xml: suele ser el NIT aunque el login sea correo. */
+  felConsultaUsuario: string
   portalPassword: string
   dateFrom: string
   dateTo: string
-}): Promise<{ rows: SatDteListRow[]; warnings: string[] }> {
+}): Promise<{ rows: SatDteListRow[]; warnings: string[]; diagnostics: SatFelRunDiagnostics }> {
   const warnings: string[] = []
   const username = opts.portalLogin.trim()
+  const apiUsuario = opts.felConsultaUsuario.trim() || username
   const password = opts.portalPassword
   if (!username || !password) throw new Error("Faltan usuario o contraseña del portal SAT.")
+  if (!apiUsuario) throw new Error("Falta NIT o usuario para consultar DTE en la API del SAT.")
 
   const headless = process.env.SAT_PUPPETEER_HEADLESS?.toLowerCase() !== "false"
   let browser: Browser | null = await launchSatBrowser(headless)
@@ -186,16 +196,19 @@ export async function runSatFelExtraction(opts: {
     throw e
   }
 
-  const preSales = await fetchFelConsultaDte(token, cookieHeader, username, opts.dateFrom, opts.dateTo, "E")
-  const prePurchases = await fetchFelConsultaDte(token, cookieHeader, username, opts.dateFrom, opts.dateTo, "R")
+  const preSales = await fetchFelConsultaDte(token, cookieHeader, apiUsuario, opts.dateFrom, opts.dateTo, "E")
+  const prePurchases = await fetchFelConsultaDte(token, cookieHeader, apiUsuario, opts.dateFrom, opts.dateTo, "R")
 
   const salesList = extractConsultaDteList(preSales)
   const purchaseList = extractConsultaDteList(prePurchases)
 
+  const msgE = felMessageFromResponse(preSales)
+  const msgR = felMessageFromResponse(prePurchases)
+
   let xmlSales: FelXmlConverted[] = []
   let xmlPurchases: FelXmlConverted[] = []
   try {
-    xmlSales = await fetchFelZipXmlLines(token, cookieHeader, username, opts.dateFrom, opts.dateTo, "E", salesList)
+    xmlSales = await fetchFelZipXmlLines(token, cookieHeader, apiUsuario, opts.dateFrom, opts.dateTo, "E", salesList)
   } catch (e) {
     warnings.push(`No se pudieron cargar líneas de detalle (emitidos): ${(e as Error).message}`)
   }
@@ -203,7 +216,7 @@ export async function runSatFelExtraction(opts: {
     xmlPurchases = await fetchFelZipXmlLines(
       token,
       cookieHeader,
-      username,
+      apiUsuario,
       opts.dateFrom,
       opts.dateTo,
       "R",
@@ -235,7 +248,48 @@ export async function runSatFelExtraction(opts: {
     return a.uuid.localeCompare(b.uuid)
   })
 
-  return { rows, warnings }
+  const normE = countNormalizedRows(salesList, "E")
+  const normR = countNormalizedRows(purchaseList, "R")
+
+  if (salesList.length > 0 && normE === 0) {
+    warnings.push(
+      "Emitidos: el SAT devolvió registros pero no pudimos leer UUID/monto (formato distinto). Revisa el NIT en tu perfil y el rango de fechas."
+    )
+  }
+  if (purchaseList.length > 0 && normR === 0) {
+    warnings.push(
+      "Recibidos (compras): el SAT devolvió registros pero no pudimos leer UUID/monto. Comprueba que el NIT del perfil sea el del contribuyente y amplía el rango de fechas si hace falta."
+    )
+  }
+  if (salesList.length === 0 && purchaseList.length === 0) {
+    if (msgE.mensaje || msgR.mensaje) {
+      warnings.push(
+        `SAT: ${[msgE.mensaje, msgR.mensaje].filter(Boolean).join(" · ") || "Sin detalle en la respuesta."}`
+      )
+    } else {
+      warnings.push(
+        "No hay DTE en el rango de fechas para este NIT en la consulta del SAT (emitidos ni recibidos). Prueba otras fechas o confirma en el portal FEL que existan documentos."
+      )
+    }
+  }
+
+  const diagnostics: SatFelRunDiagnostics = {
+    felConsultaUsuario: apiUsuario,
+    emitidos: {
+      rawListLength: salesList.length,
+      normalizedCount: normE,
+      codigo: msgE.codigo,
+      mensaje: msgE.mensaje,
+    },
+    recibidos: {
+      rawListLength: purchaseList.length,
+      normalizedCount: normR,
+      codigo: msgR.codigo,
+      mensaje: msgR.mensaje,
+    },
+  }
+
+  return { rows, warnings, diagnostics }
 }
 
 export function formatSatFelUserError(err: unknown): string {

@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Select } from "@/components/ui/select"
 import { useToast } from "@/components/ui/toast"
 import { formatCurrency, cn } from "@/lib/utils"
-import type { SatDteListRow } from "@/lib/sat-gt/fel-types"
+import type { SatDteListRow, SatFelRunDiagnostics } from "@/lib/sat-gt/fel-types"
 import { Download, FileSpreadsheet } from "lucide-react"
 
 type Opt = { value: string; label: string }
@@ -47,6 +47,7 @@ export function SatImportPanel({
   const [dateTo, setDateTo] = useState(range0.to)
   const [rows, setRows] = useState<SatDteListRow[]>([])
   const [warnings, setWarnings] = useState<string[]>([])
+  const [diagnostics, setDiagnostics] = useState<SatFelRunDiagnostics | null>(null)
   const [loading, setLoading] = useState(false)
   const [importing, setImporting] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -69,6 +70,7 @@ export function SatImportPanel({
     }
     setLoading(true)
     setWarnings([])
+    setDiagnostics(null)
     try {
       const res = await fetch(`/api/projects/${projectId}/sat/list`, {
         method: "POST",
@@ -82,8 +84,10 @@ export function SatImportPanel({
         return
       }
       const list = (data.rows || []) as SatDteListRow[]
+      const diag = data.diagnostics as SatFelRunDiagnostics | undefined
       setRows(list)
       setWarnings(Array.isArray(data.warnings) ? data.warnings : [])
+      setDiagnostics(diag && typeof diag === "object" ? diag : null)
       setSelected(new Set())
       const cat: Record<string, string> = {}
       const tx: Record<string, string> = {}
@@ -95,7 +99,14 @@ export function SatImportPanel({
       }
       setRowCategory(cat)
       setRowTxType(tx)
-      toast("success", `${list.length} DTE en el período`)
+      if (list.length === 0) {
+        toast(
+          "error",
+          "No hay facturas listadas para importar. Revisa el diagnóstico abajo (NIT en consulta, rango de fechas y mensaje del SAT)."
+        )
+      } else {
+        toast("success", `${list.length} DTE en el período`)
+      }
     } finally {
       setLoading(false)
     }
@@ -249,6 +260,34 @@ export function SatImportPanel({
                 <li key={i}>{w}</li>
               ))}
             </ul>
+          )}
+          {diagnostics && rows.length === 0 && (
+            <div className="rounded-lg border border-gray-200 bg-gray-50/90 p-4 text-xs text-gray-700 space-y-2">
+              <p className="font-semibold text-gray-900">Diagnóstico de la consulta SAT</p>
+              <p>
+                NIT / usuario en la API FEL:{" "}
+                <span className="font-mono text-[11px]">{diagnostics.felConsultaUsuario}</span> (debe coincidir con el
+                contribuyente; el login del portal puede ser otro).
+              </p>
+              <ul className="list-none space-y-1.5 font-mono text-[11px]">
+                <li>
+                  Emitidos (E): crudos {diagnostics.emitidos.rawListLength} → importables{" "}
+                  {diagnostics.emitidos.normalizedCount}
+                  {diagnostics.emitidos.codigo != null && ` · código ${diagnostics.emitidos.codigo}`}
+                  {diagnostics.emitidos.mensaje && ` · ${diagnostics.emitidos.mensaje}`}
+                </li>
+                <li>
+                  Recibidos / compras (R): crudos {diagnostics.recibidos.rawListLength} → importables{" "}
+                  {diagnostics.recibidos.normalizedCount}
+                  {diagnostics.recibidos.codigo != null && ` · código ${diagnostics.recibidos.codigo}`}
+                  {diagnostics.recibidos.mensaje && ` · ${diagnostics.recibidos.mensaje}`}
+                </li>
+              </ul>
+              <p className="text-gray-500">
+                Si «crudos» es mayor que «importables», el JSON del SAT cambió de forma; si ambos son 0, no hay datos en
+                ese rango o el NIT de consulta no es el correcto.
+              </p>
+            </div>
           )}
           {rows.length > 0 && (
             <div className="overflow-x-auto rounded-lg border border-gray-200">

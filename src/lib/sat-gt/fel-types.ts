@@ -20,3 +20,18 @@ export interface SatDteListRow {
 export function satFelExternalRef(uuid: string): string {
   return `sat-gt:fel:${uuid}`
 }
+
+/** Resumen de la respuesta consulta-dte (para diagnóstico en UI). */
+export interface SatFelConsultaDiag {
+  rawListLength: number
+  normalizedCount: number
+  codigo: string | null
+  mensaje: string | null
+}
+
+export interface SatFelRunDiagnostics {
+  emitidos: SatFelConsultaDiag
+  recibidos: SatFelConsultaDiag
+  /** Usuario enviado en el query `usuario=` de la API FEL (suele ser el NIT). */
+  felConsultaUsuario: string
+}

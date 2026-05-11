@@ -83,13 +83,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
 
   try {
-    const { rows, warnings } = await runSatFelExtraction({
+    const { rows, warnings, diagnostics } = await runSatFelExtraction({
       portalLogin: login,
+      felConsultaUsuario: nitNorm || login,
       portalPassword: password,
       dateFrom,
       dateTo,
     })
-    return NextResponse.json({ rows, warnings })
+    return NextResponse.json({ rows, warnings, diagnostics })
   } catch (e) {
     const message = formatSatFelUserError(e)
     const status = message.includes("Credenciales") ? 401 : 502

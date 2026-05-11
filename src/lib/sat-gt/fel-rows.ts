@@ -1,5 +1,9 @@
 import type { SatDteListRow } from "./fel-types"
 
+function isRecord(x: unknown): x is Record<string, unknown> {
+  return x != null && typeof x === "object" && !Array.isArray(x)
+}
+
 function pickStr(obj: Record<string, unknown>, keys: string[]): string | null {
   for (const k of keys) {
     const v = obj[k]
@@ -29,6 +33,66 @@ export function parseGtAmount(v: unknown): number | null {
   return Number.isFinite(n) ? n : null
 }
 
+const AMOUNT_KEYS = [
+  "granTotal",
+  "GranTotal",
+  "montoTotal",
+  "MontoTotal",
+  "total",
+  "Total",
+  "importeTotal",
+  "ImporteTotal",
+  "valorTotal",
+  "ValorTotal",
+  "monto",
+  "Monto",
+  "importe",
+  "Importe",
+  "totalFactura",
+  "TotalFactura",
+  "totalDocumento",
+  "montoFactura",
+  "totalGeneral",
+  "TotalGeneral",
+  "montoGravable",
+  "MontoGravable",
+]
+
+/** Busca monto en campos habituales del JSON consulta-dte y en un objeto hijo (totales, montos, etc.). */
+export function extractFelAmount(raw: Record<string, unknown>): number | null {
+  for (const k of AMOUNT_KEYS) {
+    const n = parseGtAmount(raw[k])
+    if (n != null) return n
+  }
+  for (const nestedKey of ["totales", "Totales", "montos", "Montos", "resumen", "Resumen", "importes", "Importes"]) {
+    const nested = raw[nestedKey]
+    if (!isRecord(nested)) continue
+    for (const k of AMOUNT_KEYS) {
+      const n = parseGtAmount(nested[k])
+      if (n != null) return n
+    }
+  }
+  return null
+}
+
+const UUID_KEYS = [
+  "numeroUuid",
+  "numeroUUID",
+  "uuid",
+  "UUID",
+  "UUID_DTE",
+  "uuidDte",
+  "idDte",
+  "idDocumento",
+  "numeroAutorizacionUuid",
+  "NumeroAutorizacionUuid",
+]
+
+function pickUuid(raw: Record<string, unknown>): string | null {
+  const u = pickStr(raw, UUID_KEYS)
+  return u?.trim() || null
+}
+
 function isAnulado(raw: Record<string, unknown>): boolean {
   const a = pickStr(raw, ["anulado", "Anulado", "estaAnulado", "indicadorAnulado"])
   if (!a) return false
@@ -56,18 +120,10 @@ export function normalizeSatDteRecord(
   operation: "E" | "R",
   lineSummary: string | null
 ): SatDteListRow | null {
-  const uuid = pickStr(raw, ["numeroUuid", "numeroUUID", "uuid", "UUID", "UUID_DTE"])
+  const uuid = pickUuid(raw)
   if (!uuid) return null
 
-  const amount =
-    parseGtAmount(
-      raw.granTotal ??
-        raw.GranTotal ??
-        raw.montoTotal ??
-        raw.MontoTotal ??
-        raw.total ??
-        raw.Total
-    ) ?? null
+  const amount = extractFelAmount(raw)
   if (amount == null) return null
 
   const dateRaw = pickStr(raw, [
@@ -76,6 +132,7 @@ export function normalizeSatDteRecord(
     "fechaEmisionDte",
     "fecha",
     "FechaEmision",
+    "fechaDocumento",
   ])
   const date = parseGtDateString(dateRaw)
 
@@ -121,10 +178,69 @@ export function normalizeSatDteRecord(
   }
 }
 
+function arrayOfRecords(v: unknown): Record<string, unknown>[] {
+  if (!Array.isArray(v)) return []
+  return v.filter(isRecord)
+}
+
+/**
+ * Lista de DTE en la respuesta JSON de consulta-dte (el SAT ha variado la forma de `detalle`).
+ */
 export function extractConsultaDteList(responseData: unknown): Record<string, unknown>[] {
-  if (!responseData || typeof responseData !== "object") return []
-  const o = responseData as { detalle?: { data?: unknown } }
-  const data = o.detalle?.data
-  if (!Array.isArray(data)) return []
-  return data.filter((x): x is Record<string, unknown> => x != null && typeof x === "object")
+  if (!isRecord(responseData)) return []
+
+  const root = responseData
+  const detalle = root.detalle
+
+  if (Array.isArray(detalle)) return arrayOfRecords(detalle)
+
+  if (isRecord(detalle)) {
+    if (Array.isArray(detalle.data)) return arrayOfRecords(detalle.data)
+    for (const key of [
+      "lista",
+      "registros",
+      "dtes",
+      "items",
+      "rows",
+      "content",
+      "listaDte",
+      "resultados",
+      "documentos",
+      "listaDocumento",
+    ]) {
+      if (Array.isArray(detalle[key])) return arrayOfRecords(detalle[key])
+    }
+  }
+
+  for (const key of ["data", "lista", "registros", "dtes", "resultado", "documentos"]) {
+    if (Array.isArray(root[key])) return arrayOfRecords(root[key])
+  }
+
+  return []
+}
+
+/** Código y mensaje habituales en respuestas FEL. */
+export function felMessageFromResponse(data: unknown): { codigo: string | null; mensaje: string | null } {
+  if (!isRecord(data)) return { codigo: null, mensaje: null }
+  const codigo =
+    data.codigo != null
+      ? String(data.codigo)
+      : data.Codigo != null
+        ? String(data.Codigo)
+        : data.code != null
+          ? String(data.code)
+          : null
+
+  let mensaje = pickStr(data, ["mensaje", "Mensaje", "descripcion", "Descripcion", "mensajeUsuario", "error", "Error"])
+  if (!mensaje && typeof data.detalle === "string") mensaje = data.detalle.trim() || null
+
+  return { codigo, mensaje }
+}
+
+export function countNormalizedRows(list: Record<string, unknown>[], operation: "E" | "R"): number {
+  let n = 0
+  for (const raw of list) {
+    if (normalizeSatDteRecord(raw, operation, null)) n++
+  }
+  return n
 }
