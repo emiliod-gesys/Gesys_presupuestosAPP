@@ -269,6 +269,14 @@ export function SatImportPanel({
                 <span className="font-mono text-[11px]">{diagnostics.felConsultaUsuario}</span> (debe coincidir con el
                 contribuyente; el login del portal puede ser otro).
               </p>
+              {diagnostics.felDateFormatUsed && (
+                <p className="text-gray-600">
+                  Formato de fechas en la URL de la API:{" "}
+                  <span className="font-mono">{diagnostics.felDateFormatUsed}</span>
+                  {diagnostics.felDateFormatUsed === "ddmmyyyy" && " (dd/MM/yyyy)"}
+                  {diagnostics.felDateFormatUsed === "iso" && " (YYYY-MM-DD)"}
+                </p>
+              )}
               <ul className="list-none space-y-1.5 font-mono text-[11px]">
                 <li>
                   Emitidos (E): crudos {diagnostics.emitidos.rawListLength} → importables{" "}
@@ -283,6 +291,32 @@ export function SatImportPanel({
                   {diagnostics.recibidos.mensaje && ` · ${diagnostics.recibidos.mensaje}`}
                 </li>
               </ul>
+              {diagnostics.responseHints && (
+                <div className="rounded border border-gray-200 bg-white/80 p-2 text-[10px] text-gray-600 space-y-1">
+                  <p className="font-medium text-gray-800">Forma del JSON (emitidos)</p>
+                  <p>
+                    raíz: [{diagnostics.responseHints.emitidos.rootKeys.join(", ")}] · detalle:{" "}
+                    {diagnostics.responseHints.emitidos.detalleKind}
+                    {diagnostics.responseHints.emitidos.detalleKeys?.length
+                      ? ` · claves detalle: [${diagnostics.responseHints.emitidos.detalleKeys.slice(0, 12).join(", ")}${
+                          diagnostics.responseHints.emitidos.detalleKeys.length > 12 ? "…" : ""
+                        }]`
+                      : ""}{" "}
+                    · mayor array visto: {diagnostics.responseHints.emitidos.maxArrayLengthSeen} ítems
+                  </p>
+                  <p className="font-medium text-gray-800">Forma del JSON (recibidos)</p>
+                  <p>
+                    raíz: [{diagnostics.responseHints.recibidos.rootKeys.join(", ")}] · detalle:{" "}
+                    {diagnostics.responseHints.recibidos.detalleKind}
+                    {diagnostics.responseHints.recibidos.detalleKeys?.length
+                      ? ` · claves detalle: [${diagnostics.responseHints.recibidos.detalleKeys.slice(0, 12).join(", ")}${
+                          diagnostics.responseHints.recibidos.detalleKeys.length > 12 ? "…" : ""
+                        }]`
+                      : ""}{" "}
+                    · mayor array visto: {diagnostics.responseHints.recibidos.maxArrayLengthSeen} ítems
+                  </p>
+                </div>
+              )}
               <p className="text-gray-500">
                 Si «crudos» es mayor que «importables», el JSON del SAT cambió de forma; si ambos son 0, no hay datos en
                 ese rango o el NIT de consulta no es el correcto.

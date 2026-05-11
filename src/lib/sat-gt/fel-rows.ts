@@ -183,19 +183,46 @@ function arrayOfRecords(v: unknown): Record<string, unknown>[] {
   return v.filter(isRecord)
 }
 
-/**
- * Lista de DTE en la respuesta JSON de consulta-dte (el SAT ha variado la forma de `detalle`).
- */
-export function extractConsultaDteList(responseData: unknown): Record<string, unknown>[] {
-  if (!isRecord(responseData)) return []
+/** `detalle` a veces viene como string JSON; la raíz puede ser string. */
+export function unwrapFelConsultaResponse(responseData: unknown): unknown {
+  let root: unknown = responseData
+  if (typeof root === "string") {
+    try {
+      root = JSON.parse(root) as unknown
+    } catch {
+      return responseData
+    }
+  }
+  if (!isRecord(root)) return root
+  const d = root.detalle
+  if (typeof d === "string") {
+    try {
+      const parsed = JSON.parse(d) as unknown
+      return { ...root, detalle: parsed }
+    } catch {
+      return root
+    }
+  }
+  return root
+}
 
-  const root = responseData
+function recordsFromMaybeArrayOrMap(v: unknown): Record<string, unknown>[] {
+  if (Array.isArray(v)) return arrayOfRecords(v)
+  if (isRecord(v)) {
+    const vals = Object.values(v).filter(isRecord)
+    if (vals.length > 0) return vals
+  }
+  return []
+}
+
+function extractConsultaDteListStructured(root: Record<string, unknown>): Record<string, unknown>[] {
   const detalle = root.detalle
 
   if (Array.isArray(detalle)) return arrayOfRecords(detalle)
 
   if (isRecord(detalle)) {
-    if (Array.isArray(detalle.data)) return arrayOfRecords(detalle.data)
+    const fromData = recordsFromMaybeArrayOrMap(detalle.data)
+    if (fromData.length > 0) return fromData
     for (const key of [
       "lista",
       "registros",
@@ -207,16 +234,113 @@ export function extractConsultaDteList(responseData: unknown): Record<string, un
       "resultados",
       "documentos",
       "listaDocumento",
+      "listaDocumentos",
+      "detalleLista",
+      "listado",
     ]) {
-      if (Array.isArray(detalle[key])) return arrayOfRecords(detalle[key])
+      const fromKey = recordsFromMaybeArrayOrMap(detalle[key])
+      if (fromKey.length > 0) return fromKey
     }
   }
 
   for (const key of ["data", "lista", "registros", "dtes", "resultado", "documentos"]) {
-    if (Array.isArray(root[key])) return arrayOfRecords(root[key])
+    const fromRoot = recordsFromMaybeArrayOrMap(root[key])
+    if (fromRoot.length > 0) return fromRoot
   }
 
   return []
+}
+
+function rowLooksLikeFelDte(row: Record<string, unknown>): boolean {
+  if (pickUuid(row)) return true
+  if (extractFelAmount(row) != null) return true
+  for (const k of Object.keys(row)) {
+    if (/nit(emisor|receptor|proveedor)|tipoDte|serie|numero|autorizacion|dte|fel/i.test(k)) return true
+  }
+  return false
+}
+
+function scoreDteCandidateArray(arr: Record<string, unknown>[]): number {
+  if (arr.length === 0) return 0
+  let score = Math.min(arr.length, 5000) * 2
+  for (const row of arr.slice(0, 5)) {
+    if (pickUuid(row)) score += 40
+    if (extractFelAmount(row) != null) score += 25
+    if (rowLooksLikeFelDte(row)) score += 10
+  }
+  return score
+}
+
+function deepCollectDteCandidateArrays(value: unknown, depth: number, out: Record<string, unknown>[][]): void {
+  if (depth > 10 || value == null) return
+  if (Array.isArray(value)) {
+    const recs = arrayOfRecords(value)
+    if (recs.length > 0 && recs.some(rowLooksLikeFelDte)) {
+      out.push(recs)
+    }
+    for (const el of value) {
+      deepCollectDteCandidateArrays(el, depth + 1, out)
+    }
+    return
+  }
+  if (!isRecord(value)) return
+  for (const v of Object.values(value)) {
+    deepCollectDteCandidateArrays(v, depth + 1, out)
+  }
+}
+
+function deepFindBestDteRecordArray(root: Record<string, unknown>): Record<string, unknown>[] {
+  const candidates: Record<string, unknown>[][] = []
+  deepCollectDteCandidateArrays(root, 0, candidates)
+  if (candidates.length === 0) return []
+  candidates.sort((a, b) => scoreDteCandidateArray(b) - scoreDteCandidateArray(a))
+  return candidates[0] ?? []
+}
+
+/**
+ * Lista de DTE en la respuesta JSON de consulta-dte (el SAT ha variado la forma de `detalle`).
+ */
+export function extractConsultaDteList(responseData: unknown): Record<string, unknown>[] {
+  const root = unwrapFelConsultaResponse(responseData)
+  if (!isRecord(root)) return []
+
+  const structured = extractConsultaDteListStructured(root)
+  if (structured.length > 0) return structured
+
+  return deepFindBestDteRecordArray(root)
+}
+
+/** Para diagnóstico en UI (solo estructura, sin datos sensibles). */
+export function describeFelResponseShape(responseData: unknown): {
+  rootKeys: string[]
+  detalleKind: string
+  detalleKeys: string[] | null
+  maxArrayLengthSeen: number
+} {
+  const root = unwrapFelConsultaResponse(responseData)
+  if (!isRecord(root)) {
+    return { rootKeys: [], detalleKind: typeof root, detalleKeys: null, maxArrayLengthSeen: 0 }
+  }
+  const rootKeys = Object.keys(root)
+  const det = root.detalle
+  let detalleKind = Array.isArray(det) ? "array" : typeof det
+  let detalleKeys: string[] | null = null
+  if (isRecord(det)) {
+    detalleKind = "object"
+    detalleKeys = Object.keys(det)
+  }
+  let maxLen = 0
+  const walk = (v: unknown, d: number) => {
+    if (d > 8 || v == null) return
+    if (Array.isArray(v)) {
+      maxLen = Math.max(maxLen, v.length)
+      for (const x of v.slice(0, 3)) walk(x, d + 1)
+      return
+    }
+    if (isRecord(v)) for (const x of Object.values(v)) walk(x, d + 1)
+  }
+  walk(root, 0)
+  return { rootKeys, detalleKind, detalleKeys, maxArrayLengthSeen: maxLen }
 }
 
 /** Código y mensaje habituales en respuestas FEL. */
@@ -233,6 +357,16 @@ export function felMessageFromResponse(data: unknown): { codigo: string | null; 
 
   let mensaje = pickStr(data, ["mensaje", "Mensaje", "descripcion", "Descripcion", "mensajeUsuario", "error", "Error"])
   if (!mensaje && typeof data.detalle === "string") mensaje = data.detalle.trim() || null
+
+  if (isRecord(data.detalle)) {
+    const inner = data.detalle
+    const innerMsg = pickStr(inner, ["mensaje", "Mensaje", "descripcion", "descripcionError", "error"])
+    if (innerMsg) mensaje = mensaje ? `${mensaje} · ${innerMsg}` : innerMsg
+    const innerCode = inner.codigo ?? inner.Codigo
+    if (innerCode != null && codigo == null) {
+      return { codigo: String(innerCode), mensaje }
+    }
+  }
 
   return { codigo, mensaje }
 }

@@ -2,23 +2,37 @@ import axios, { type AxiosError } from "axios"
 import JSZip from "jszip"
 import { parseStringPromise } from "xml2js"
 
+/** Algunas despliegues del SAT esperan dd/MM/yyyy en el query en lugar de ISO. */
+export function isoDateToDdMmYyyy(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso.trim())
+  if (!m) return iso.trim()
+  return `${m[3]}/${m[2]}/${m[1]}`
+}
+
+export type FelConsultaDateFormat = "iso" | "ddmmyyyy"
+
 export async function fetchFelConsultaDte(
   token: string,
   cookieHeader: string,
   user: string,
   startDate: string,
   endDate: string,
-  operationType: "E" | "R"
+  operationType: "E" | "R",
+  opts?: { dateFormat?: FelConsultaDateFormat }
 ): Promise<unknown> {
+  const fmt = opts?.dateFormat ?? "iso"
+  const s = fmt === "ddmmyyyy" ? isoDateToDdMmYyyy(startDate) : startDate
+  const e = fmt === "ddmmyyyy" ? isoDateToDdMmYyyy(endDate) : endDate
   const url =
     `https://felcons.c.sat.gob.gt/dte-agencia-virtual/api/consulta-dte?usuario=${encodeURIComponent(user)}` +
-    `&tipoOperacion=${operationType}&establecimiento=&tipoDte=&noAutorizacion=&nitIdReceptor=&estadoDte=&serie=&numero=&moneda=&montoTotalRangoIni=&montoTotalRangoFinal=&impuesto=&nitCertificador=&resultado=&fechaEmisionIni=${encodeURIComponent(startDate)}&fechaEmisionFinal=${encodeURIComponent(endDate)}`
+    `&tipoOperacion=${operationType}&establecimiento=&tipoDte=&noAutorizacion=&nitIdReceptor=&estadoDte=&serie=&numero=&moneda=&montoTotalRangoIni=&montoTotalRangoFinal=&impuesto=&nitCertificador=&resultado=&fechaEmisionIni=${encodeURIComponent(s)}&fechaEmisionFinal=${encodeURIComponent(e)}`
 
   try {
     const response = await axios.get(url, {
       headers: {
-        Authorization: token,
+        Authorization: token.trim(),
         Cookie: cookieHeader,
+        Accept: "application/json",
       },
     })
     return response.data
@@ -48,18 +62,23 @@ export async function fetchFelZipXmlLines(
   startDate: string,
   endDate: string,
   operationType: "E" | "R",
-  bodyRows: unknown[]
+  bodyRows: unknown[],
+  opts?: { dateFormat?: FelConsultaDateFormat }
 ): Promise<FelXmlConverted[]> {
   if (!Array.isArray(bodyRows) || bodyRows.length === 0) return []
 
+  const fmt = opts?.dateFormat ?? "iso"
+  const s = fmt === "ddmmyyyy" ? isoDateToDdMmYyyy(startDate) : startDate
+  const e = fmt === "ddmmyyyy" ? isoDateToDdMmYyyy(endDate) : endDate
   const url =
     `https://felcons.c.sat.gob.gt/dte-agencia-virtual/api/consulta-dte/zip-xml?usuario=${encodeURIComponent(user)}` +
-    `&tipoOperacion=${operationType}&establecimiento=0&tipoDte=TDS&noAutorizacion=&nitIdReceptor=&estadoDte=TDS&serie=&numero=&moneda=TDS&montoTotalRangoIni=&montoTotalRangoFinal=&impuesto=&nitCertificador=&resultado=&fechaEmisionIni=${encodeURIComponent(startDate)}&fechaEmisionFinal=${encodeURIComponent(endDate)}`
+    `&tipoOperacion=${operationType}&establecimiento=0&tipoDte=TDS&noAutorizacion=&nitIdReceptor=&estadoDte=TDS&serie=&numero=&moneda=TDS&montoTotalRangoIni=&montoTotalRangoFinal=&impuesto=&nitCertificador=&resultado=&fechaEmisionIni=${encodeURIComponent(s)}&fechaEmisionFinal=${encodeURIComponent(e)}`
 
   const response = await axios.post<ArrayBuffer>(url, bodyRows, {
     headers: {
-      Authorization: token,
+      Authorization: token.trim(),
       Cookie: cookieHeader,
+      Accept: "application/json",
       "Content-Type": "application/json",
     },
     responseType: "arraybuffer",

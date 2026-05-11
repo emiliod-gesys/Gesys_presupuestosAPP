@@ -29,9 +29,23 @@ export interface SatFelConsultaDiag {
   mensaje: string | null
 }
 
+/** Pistas de forma del JSON (sin datos sensibles). */
+export interface SatFelResponseShapeHint {
+  rootKeys: string[]
+  detalleKind: string
+  detalleKeys: string[] | null
+  maxArrayLengthSeen: number
+}
+
 export interface SatFelRunDiagnostics {
   emitidos: SatFelConsultaDiag
   recibidos: SatFelConsultaDiag
   /** Usuario enviado en el query `usuario=` de la API FEL (suele ser el NIT). */
   felConsultaUsuario: string
+  /** Formato de fecha usado en la URL de consulta-dte (último intento que devolvió datos o el reintento). */
+  felDateFormatUsed?: "iso" | "ddmmyyyy"
+  responseHints?: {
+    emitidos: SatFelResponseShapeHint
+    recibidos: SatFelResponseShapeHint
+  }
 }

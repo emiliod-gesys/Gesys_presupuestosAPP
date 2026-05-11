@@ -1,7 +1,13 @@
 import type { Browser, Page } from "puppeteer-core"
-import { fetchFelConsultaDte, fetchFelZipXmlLines, type FelXmlConverted } from "./fel-api"
+import {
+  fetchFelConsultaDte,
+  fetchFelZipXmlLines,
+  type FelConsultaDateFormat,
+  type FelXmlConverted,
+} from "./fel-api"
 import {
   countNormalizedRows,
+  describeFelResponseShape,
   extractConsultaDteList,
   felMessageFromResponse,
   normalizeSatDteRecord,
@@ -196,11 +202,57 @@ export async function runSatFelExtraction(opts: {
     throw e
   }
 
-  const preSales = await fetchFelConsultaDte(token, cookieHeader, apiUsuario, opts.dateFrom, opts.dateTo, "E")
-  const prePurchases = await fetchFelConsultaDte(token, cookieHeader, apiUsuario, opts.dateFrom, opts.dateTo, "R")
+  let dateFormatUsed: FelConsultaDateFormat = "iso"
+  let preSales = await fetchFelConsultaDte(
+    token,
+    cookieHeader,
+    apiUsuario,
+    opts.dateFrom,
+    opts.dateTo,
+    "E",
+    { dateFormat: dateFormatUsed }
+  )
+  let prePurchases = await fetchFelConsultaDte(
+    token,
+    cookieHeader,
+    apiUsuario,
+    opts.dateFrom,
+    opts.dateTo,
+    "R",
+    { dateFormat: dateFormatUsed }
+  )
 
-  const salesList = extractConsultaDteList(preSales)
-  const purchaseList = extractConsultaDteList(prePurchases)
+  let salesList = extractConsultaDteList(preSales)
+  let purchaseList = extractConsultaDteList(prePurchases)
+
+  if (salesList.length === 0 && purchaseList.length === 0) {
+    dateFormatUsed = "ddmmyyyy"
+    preSales = await fetchFelConsultaDte(
+      token,
+      cookieHeader,
+      apiUsuario,
+      opts.dateFrom,
+      opts.dateTo,
+      "E",
+      { dateFormat: dateFormatUsed }
+    )
+    prePurchases = await fetchFelConsultaDte(
+      token,
+      cookieHeader,
+      apiUsuario,
+      opts.dateFrom,
+      opts.dateTo,
+      "R",
+      { dateFormat: dateFormatUsed }
+    )
+    salesList = extractConsultaDteList(preSales)
+    purchaseList = extractConsultaDteList(prePurchases)
+    if (salesList.length + purchaseList.length > 0) {
+      warnings.push(
+        "La API devolvió DTE usando fechas en formato dd/MM/yyyy en la URL (reintento automático). Si antes veías la tabla vacía, el SAT ignoraba el rango en formato ISO."
+      )
+    }
+  }
 
   const msgE = felMessageFromResponse(preSales)
   const msgR = felMessageFromResponse(prePurchases)
@@ -208,7 +260,16 @@ export async function runSatFelExtraction(opts: {
   let xmlSales: FelXmlConverted[] = []
   let xmlPurchases: FelXmlConverted[] = []
   try {
-    xmlSales = await fetchFelZipXmlLines(token, cookieHeader, apiUsuario, opts.dateFrom, opts.dateTo, "E", salesList)
+    xmlSales = await fetchFelZipXmlLines(
+      token,
+      cookieHeader,
+      apiUsuario,
+      opts.dateFrom,
+      opts.dateTo,
+      "E",
+      salesList,
+      { dateFormat: dateFormatUsed }
+    )
   } catch (e) {
     warnings.push(`No se pudieron cargar líneas de detalle (emitidos): ${(e as Error).message}`)
   }
@@ -220,7 +281,8 @@ export async function runSatFelExtraction(opts: {
       opts.dateFrom,
       opts.dateTo,
       "R",
-      purchaseList
+      purchaseList,
+      { dateFormat: dateFormatUsed }
     )
   } catch (e) {
     warnings.push(`No se pudieron cargar líneas de detalle (recibidos): ${(e as Error).message}`)
@@ -261,6 +323,9 @@ export async function runSatFelExtraction(opts: {
       "Recibidos (compras): el SAT devolvió registros pero no pudimos leer UUID/monto. Comprueba que el NIT del perfil sea el del contribuyente y amplía el rango de fechas si hace falta."
     )
   }
+  const hintE = describeFelResponseShape(preSales)
+  const hintR = describeFelResponseShape(prePurchases)
+
   if (salesList.length === 0 && purchaseList.length === 0) {
     if (msgE.mensaje || msgR.mensaje) {
       warnings.push(
@@ -271,10 +336,17 @@ export async function runSatFelExtraction(opts: {
         "No hay DTE en el rango de fechas para este NIT en la consulta del SAT (emitidos ni recibidos). Prueba otras fechas o confirma en el portal FEL que existan documentos."
       )
     }
+    if (hintE.maxArrayLengthSeen > 0 || hintR.maxArrayLengthSeen > 0) {
+      warnings.push(
+        `La respuesta JSON sí contiene arrays (máx. ${Math.max(hintE.maxArrayLengthSeen, hintR.maxArrayLengthSeen)} elementos), pero no reconocimos filas tipo DTE. Revisa el diagnóstico de forma de respuesta abajo o avísanos para ajustar el parseo al formato actual del SAT.`
+      )
+    }
   }
 
   const diagnostics: SatFelRunDiagnostics = {
     felConsultaUsuario: apiUsuario,
+    felDateFormatUsed: dateFormatUsed,
+    responseHints: { emitidos: hintE, recibidos: hintR },
     emitidos: {
       rawListLength: salesList.length,
       normalizedCount: normE,
