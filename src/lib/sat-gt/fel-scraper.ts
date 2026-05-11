@@ -1,6 +1,6 @@
 import type { Browser, Page } from "puppeteer-core"
 import {
-  fetchFelConsultaDte,
+  fetchFelConsultaDteMergedPages,
   fetchFelZipXmlLines,
   type FelConsultaDateFormat,
   type FelXmlConverted,
@@ -10,6 +10,7 @@ import {
   describeFelResponseShape,
   extractConsultaDteList,
   felMessageFromResponse,
+  isFelCodigoClientError,
   normalizeSatDteRecord,
 } from "./fel-rows"
 import type { SatDteListRow, SatFelRunDiagnostics } from "./fel-types"
@@ -203,53 +204,70 @@ export async function runSatFelExtraction(opts: {
   }
 
   let dateFormatUsed: FelConsultaDateFormat = "iso"
-  let preSales = await fetchFelConsultaDte(
+  const preSalesIso = await fetchFelConsultaDteMergedPages(
     token,
     cookieHeader,
     apiUsuario,
     opts.dateFrom,
     opts.dateTo,
     "E",
-    { dateFormat: dateFormatUsed }
+    { dateFormat: "iso" }
   )
-  let prePurchases = await fetchFelConsultaDte(
+  const prePurchasesIso = await fetchFelConsultaDteMergedPages(
     token,
     cookieHeader,
     apiUsuario,
     opts.dateFrom,
     opts.dateTo,
     "R",
-    { dateFormat: dateFormatUsed }
+    { dateFormat: "iso" }
   )
 
+  let preSales = preSalesIso
+  let prePurchases = prePurchasesIso
   let salesList = extractConsultaDteList(preSales)
   let purchaseList = extractConsultaDteList(prePurchases)
 
   if (salesList.length === 0 && purchaseList.length === 0) {
-    dateFormatUsed = "ddmmyyyy"
-    preSales = await fetchFelConsultaDte(
+    const preSalesDd = await fetchFelConsultaDteMergedPages(
       token,
       cookieHeader,
       apiUsuario,
       opts.dateFrom,
       opts.dateTo,
       "E",
-      { dateFormat: dateFormatUsed }
+      { dateFormat: "ddmmyyyy" }
     )
-    prePurchases = await fetchFelConsultaDte(
+    const prePurchasesDd = await fetchFelConsultaDteMergedPages(
       token,
       cookieHeader,
       apiUsuario,
       opts.dateFrom,
       opts.dateTo,
       "R",
-      { dateFormat: dateFormatUsed }
+      { dateFormat: "ddmmyyyy" }
     )
-    salesList = extractConsultaDteList(preSales)
-    purchaseList = extractConsultaDteList(prePurchases)
-    if (salesList.length + purchaseList.length > 0) {
+    const codeE = felMessageFromResponse(preSalesDd).codigo
+    const codeR = felMessageFromResponse(prePurchasesDd).codigo
+    const salesDd = extractConsultaDteList(preSalesDd)
+    const purchaseDd = extractConsultaDteList(prePurchasesDd)
+    const ddOk =
+      !isFelCodigoClientError(codeE) &&
+      !isFelCodigoClientError(codeR) &&
+      salesDd.length + purchaseDd.length > 0
+
+    if (ddOk) {
+      dateFormatUsed = "ddmmyyyy"
+      preSales = preSalesDd
+      prePurchases = prePurchasesDd
+      salesList = salesDd
+      purchaseList = purchaseDd
       warnings.push(
-        "La API devolvió DTE usando fechas en formato dd/MM/yyyy en la URL (reintento automático). Si antes veías la tabla vacía, el SAT ignoraba el rango en formato ISO."
+        "La API devolvió DTE usando fechas dd/MM/yyyy en la URL (reintento automático). El formato ISO no devolvía filas en esta consulta."
+      )
+    } else {
+      warnings.push(
+        "Reintento con fechas dd/MM/yyyy en la URL no aplicado (el SAT respondió error o sin datos). Se mantiene el resultado en formato ISO (YYYY-MM-DD), con paginación ya aplicada."
       )
     }
   }

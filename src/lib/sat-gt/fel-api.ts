@@ -1,6 +1,13 @@
 import axios, { type AxiosError } from "axios"
 import JSZip from "jszip"
 import { parseStringPromise } from "xml2js"
+import {
+  felMessageFromResponse,
+  getConsultaDtePagedSlice,
+  getFelDteUuid,
+  isFelCodigoClientError,
+  unwrapFelConsultaResponse,
+} from "./fel-rows"
 
 /** Algunas despliegues del SAT esperan dd/MM/yyyy en el query en lugar de ISO. */
 export function isoDateToDdMmYyyy(iso: string): string {
@@ -11,6 +18,13 @@ export function isoDateToDdMmYyyy(iso: string): string {
 
 export type FelConsultaDateFormat = "iso" | "ddmmyyyy"
 
+export type FelConsultaDteOpts = {
+  dateFormat?: FelConsultaDateFormat
+  /** Paginación (portal FEL): suele ir con `tamanoPagina`. */
+  pagina?: number
+  tamanoPagina?: number
+}
+
 export async function fetchFelConsultaDte(
   token: string,
   cookieHeader: string,
@@ -18,14 +32,20 @@ export async function fetchFelConsultaDte(
   startDate: string,
   endDate: string,
   operationType: "E" | "R",
-  opts?: { dateFormat?: FelConsultaDateFormat }
+  opts?: FelConsultaDteOpts
 ): Promise<unknown> {
   const fmt = opts?.dateFormat ?? "iso"
   const s = fmt === "ddmmyyyy" ? isoDateToDdMmYyyy(startDate) : startDate
   const e = fmt === "ddmmyyyy" ? isoDateToDdMmYyyy(endDate) : endDate
-  const url =
+  let url =
     `https://felcons.c.sat.gob.gt/dte-agencia-virtual/api/consulta-dte?usuario=${encodeURIComponent(user)}` +
     `&tipoOperacion=${operationType}&establecimiento=&tipoDte=&noAutorizacion=&nitIdReceptor=&estadoDte=&serie=&numero=&moneda=&montoTotalRangoIni=&montoTotalRangoFinal=&impuesto=&nitCertificador=&resultado=&fechaEmisionIni=${encodeURIComponent(s)}&fechaEmisionFinal=${encodeURIComponent(e)}`
+  if (opts?.pagina != null && opts.pagina > 0) {
+    url += `&pagina=${encodeURIComponent(String(opts.pagina))}`
+  }
+  if (opts?.tamanoPagina != null && opts.tamanoPagina > 0) {
+    url += `&tamanoPagina=${encodeURIComponent(String(opts.tamanoPagina))}`
+  }
 
   try {
     const response = await axios.get(url, {
@@ -50,6 +70,94 @@ export async function fetchFelConsultaDte(
   }
 }
 
+/**
+ * Une todas las páginas de consulta-dte cuando `detalle.total` > filas en `detalle.data`.
+ * Si `tamanoPagina` grande provoca BAD_REQUEST, reintenta sin tamaño y pagina por página.
+ */
+export async function fetchFelConsultaDteMergedPages(
+  token: string,
+  cookieHeader: string,
+  user: string,
+  startDate: string,
+  endDate: string,
+  operationType: "E" | "R",
+  opts?: { dateFormat?: FelConsultaDateFormat }
+): Promise<unknown> {
+  const fmt = opts?.dateFormat ?? "iso"
+
+  async function one(extra: FelConsultaDteOpts): Promise<unknown> {
+    return fetchFelConsultaDte(token, cookieHeader, user, startDate, endDate, operationType, {
+      dateFormat: fmt,
+      ...extra,
+    })
+  }
+
+  let resp = await one({ pagina: 1, tamanoPagina: 500 })
+  let code = felMessageFromResponse(resp).codigo
+  /** Si `tamanoPagina` provoca error, el SAT a veces solo acepta `pagina` suelta. */
+  let pageOpts: FelConsultaDteOpts = { pagina: 1, tamanoPagina: 500 }
+  if (isFelCodigoClientError(code)) {
+    resp = await one({})
+    pageOpts = {}
+    code = felMessageFromResponse(resp).codigo
+  }
+
+  let slice = getConsultaDtePagedSlice(resp)
+  const merged: Record<string, unknown>[] = []
+  const seen = new Set<string>()
+  const pushDedup = (rows: Record<string, unknown>[]) => {
+    for (const r of rows) {
+      const id = getFelDteUuid(r) ?? `k:${JSON.stringify(Object.keys(r).sort())}:${merged.length}`
+      if (seen.has(id)) continue
+      seen.add(id)
+      merged.push(r)
+    }
+  }
+  pushDedup(slice.rows)
+
+  let total = slice.totalReported
+  const pageSize = Math.max(50, slice.pageSizeHint || slice.rows.length || 50)
+  let page = 2
+  const maxPages = 120
+
+  while (merged.length < total && page <= maxPages) {
+    const extra: FelConsultaDteOpts =
+      pageOpts.tamanoPagina != null && pageOpts.tamanoPagina > 0
+        ? { pagina: page, tamanoPagina: pageOpts.tamanoPagina }
+        : { pagina: page }
+    let r = await one(extra)
+    let c = felMessageFromResponse(r).codigo
+    if (isFelCodigoClientError(c) && extra.tamanoPagina != null) {
+      r = await one({ pagina: page })
+      c = felMessageFromResponse(r).codigo
+    }
+    if (isFelCodigoClientError(c)) break
+    const next = getConsultaDtePagedSlice(r)
+    if (next.rows.length === 0) break
+    const before = merged.length
+    pushDedup(next.rows)
+    if (merged.length === before) break
+    total = Math.max(total, next.totalReported)
+    page++
+    if (next.rows.length < pageSize * 0.25 && merged.length >= total) break
+  }
+
+  const base = unwrapFelConsultaResponse(resp)
+  if (typeof base !== "object" || base == null || !("detalle" in base)) return resp
+  const b = base as Record<string, unknown>
+  const det = b.detalle
+  if (typeof det !== "object" || det == null) return resp
+  const d = det as Record<string, unknown>
+  return {
+    ...b,
+    detalle: {
+      ...d,
+      data: merged,
+      total: Math.max(total, merged.length),
+    },
+  }
+}
+
 export type FelXmlLine = { bienOServicio: string; descripcion: string }
 
 export type FelXmlConverted = { uuid: string; items: FelXmlLine[] }
@@ -63,7 +171,7 @@ export async function fetchFelZipXmlLines(
   endDate: string,
   operationType: "E" | "R",
   bodyRows: unknown[],
-  opts?: { dateFormat?: FelConsultaDateFormat }
+  opts?: FelConsultaDteOpts
 ): Promise<FelXmlConverted[]> {
   if (!Array.isArray(bodyRows) || bodyRows.length === 0) return []
 

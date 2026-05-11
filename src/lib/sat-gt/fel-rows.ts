@@ -93,6 +93,11 @@ function pickUuid(raw: Record<string, unknown>): string | null {
   return u?.trim() || null
 }
 
+/** UUID / clave de deduplicación entre páginas de consulta-dte. */
+export function getFelDteUuid(row: Record<string, unknown>): string | null {
+  return pickUuid(row)
+}
+
 function isAnulado(raw: Record<string, unknown>): boolean {
   const a = pickStr(raw, ["anulado", "Anulado", "estaAnulado", "indicadorAnulado"])
   if (!a) return false
@@ -311,6 +316,49 @@ export function extractConsultaDteList(responseData: unknown): Record<string, un
 }
 
 /** Para diagnóstico en UI (solo estructura, sin datos sensibles). */
+/** Extrae `detalle.data` y totales típicos de la paginación del SAT (`total`, `totalPagina`). */
+export function getConsultaDtePagedSlice(responseData: unknown): {
+  rows: Record<string, unknown>[]
+  totalReported: number
+  pageSizeHint: number | null
+} {
+  const root = unwrapFelConsultaResponse(responseData)
+  if (!isRecord(root)) return { rows: [], totalReported: 0, pageSizeHint: null }
+
+  const det = root.detalle
+  if (!isRecord(det)) return { rows: [], totalReported: 0, pageSizeHint: null }
+
+  let rows: Record<string, unknown>[] = []
+  if (Array.isArray(det.data)) rows = arrayOfRecords(det.data)
+  else if (isRecord(det.data)) rows = Object.values(det.data).filter(isRecord)
+
+  const totalRaw = det.total ?? det.Total ?? det.totalRegistros ?? det.totalElementos
+  let totalReported = 0
+  if (typeof totalRaw === "number" && Number.isFinite(totalRaw)) totalReported = Math.trunc(totalRaw)
+  else if (totalRaw != null) {
+    const n = parseInt(String(totalRaw).replace(/[^\d]/g, "") || "0", 10)
+    totalReported = Number.isFinite(n) ? n : 0
+  }
+
+  totalReported = Math.max(totalReported, rows.length)
+
+  const ps = det.totalPagina ?? det.tamanoPagina ?? det.tamano ?? det.pageSize ?? det.rows
+  let pageSizeHint: number | null = null
+  if (typeof ps === "number" && Number.isFinite(ps) && ps > 0) pageSizeHint = Math.trunc(ps)
+  else if (ps != null) {
+    const n = parseInt(String(ps).replace(/[^\d]/g, ""), 10)
+    pageSizeHint = Number.isFinite(n) && n > 0 ? n : null
+  }
+
+  return { rows, totalReported, pageSizeHint }
+}
+
+export function isFelCodigoClientError(codigo: string | null | undefined): boolean {
+  if (codigo == null) return false
+  const u = String(codigo).toUpperCase()
+  return u.includes("BAD") || u.includes("ERROR") || u === "BAD_REQUEST" || u === "FORBIDDEN"
+}
+
 export function describeFelResponseShape(responseData: unknown): {
   rootKeys: string[]
   detalleKind: string
