@@ -113,7 +113,41 @@ export async function fetchFelConsultaDteMergedPages(
   pushDedup(slice.rows)
 
   let total = slice.totalReported
-  const pageSize = Math.max(1, slice.pageSizeHint || slice.rows.length || 1)
+  const tp0 = slice.totalPaginaReported ?? 1
+
+  /**
+   * El SAT a veces responde ACCEPTED con `detalle.data` vacío en la petición **sin** `pagina`,
+   * pero devuelve filas al pedir `pagina=1` explícita (el bucle de páginas 2..n nunca llegaba a la 1).
+   */
+  if (merged.length === 0) {
+    const hint = Math.max(1, slice.pageSizeHint || 10)
+    const maxFirstPass = Math.min(
+      120,
+      Math.max(tp0, total > 0 ? Math.ceil(total / hint) + 2 : 5)
+    )
+    let emptyStreak = 0
+    for (let p = 1; p <= maxFirstPass; p++) {
+      const r = await one({ pagina: p })
+      const c = felMessageFromResponse(r).codigo
+      if (isFelCodigoClientError(c)) break
+      const sn = getConsultaDtePagedSlice(r)
+      const before = merged.length
+      pushDedup(sn.rows)
+      total = Math.max(total, sn.totalReported)
+      if (sn.rows.length > 0) {
+        resp = r
+        slice = sn
+        emptyStreak = 0
+      } else {
+        emptyStreak++
+        if (p > 1 && emptyStreak >= 2) break
+      }
+      if (total > 0 && merged.length >= total) break
+    }
+  }
+
+  const pageSizeSlice = getConsultaDtePagedSlice(resp)
+  const pageSize = Math.max(1, pageSizeSlice.pageSizeHint || pageSizeSlice.rows.length || 1)
   let page = 2
   const maxPages = 120
 

@@ -285,6 +285,9 @@ export function SatImportPanel({
                   {diagnostics.emitidos.satTotalRegistros != null &&
                     diagnostics.emitidos.satTotalRegistros > diagnostics.emitidos.rawListLength &&
                     ` · total SAT ${diagnostics.emitidos.satTotalRegistros}`}
+                  {diagnostics.emitidos.satTotalPagina != null && diagnostics.emitidos.satTotalPagina > 0
+                    ? ` · totalPagina SAT ${diagnostics.emitidos.satTotalPagina}`
+                    : ""}
                   {diagnostics.emitidos.codigo != null && ` · código ${diagnostics.emitidos.codigo}`}
                   {diagnostics.emitidos.mensaje && ` · ${diagnostics.emitidos.mensaje}`}
                 </li>
@@ -294,6 +297,9 @@ export function SatImportPanel({
                   {diagnostics.recibidos.satTotalRegistros != null &&
                     diagnostics.recibidos.satTotalRegistros > diagnostics.recibidos.rawListLength &&
                     ` · total SAT ${diagnostics.recibidos.satTotalRegistros}`}
+                  {diagnostics.recibidos.satTotalPagina != null && diagnostics.recibidos.satTotalPagina > 0
+                    ? ` · totalPagina SAT ${diagnostics.recibidos.satTotalPagina}`
+                    : ""}
                   {diagnostics.recibidos.codigo != null && ` · código ${diagnostics.recibidos.codigo}`}
                   {diagnostics.recibidos.mensaje && ` · ${diagnostics.recibidos.mensaje}`}
                 </li>

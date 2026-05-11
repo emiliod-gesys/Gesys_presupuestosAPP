@@ -373,14 +373,16 @@ export async function runSatFelExtraction(opts: {
       normalizedCount: normE,
       codigo: msgE.codigo,
       mensaje: msgE.mensaje,
-      satTotalRegistros: sliceDiagE.totalReported > 0 ? sliceDiagE.totalReported : null,
+      satTotalRegistros: sliceDiagE.totalReported,
+      satTotalPagina: sliceDiagE.totalPaginaReported,
     },
     recibidos: {
       rawListLength: purchaseList.length,
       normalizedCount: normR,
       codigo: msgR.codigo,
       mensaje: msgR.mensaje,
-      satTotalRegistros: sliceDiagR.totalReported > 0 ? sliceDiagR.totalReported : null,
+      satTotalRegistros: sliceDiagR.totalReported,
+      satTotalPagina: sliceDiagR.totalPaginaReported,
     },
   }
 

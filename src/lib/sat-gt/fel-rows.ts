@@ -320,12 +320,18 @@ export function getConsultaDtePagedSlice(responseData: unknown): {
   rows: Record<string, unknown>[]
   totalReported: number
   pageSizeHint: number | null
+  /** Número de páginas que indica el SAT (`totalPagina`); útil si `data` viene vacío sin `pagina=1`. */
+  totalPaginaReported: number | null
 } {
   const root = unwrapFelConsultaResponse(responseData)
-  if (!isRecord(root)) return { rows: [], totalReported: 0, pageSizeHint: null }
+  if (!isRecord(root)) {
+    return { rows: [], totalReported: 0, pageSizeHint: null, totalPaginaReported: null }
+  }
 
   const det = root.detalle
-  if (!isRecord(det)) return { rows: [], totalReported: 0, pageSizeHint: null }
+  if (!isRecord(det)) {
+    return { rows: [], totalReported: 0, pageSizeHint: null, totalPaginaReported: null }
+  }
 
   let rows: Record<string, unknown>[] = []
   if (Array.isArray(det.data)) rows = arrayOfRecords(det.data)
@@ -341,7 +347,16 @@ export function getConsultaDtePagedSlice(responseData: unknown): {
 
   totalReported = Math.max(totalReported, rows.length)
 
-  const ps = det.totalPagina ?? det.tamanoPagina ?? det.tamano ?? det.pageSize ?? det.rows
+  const tpRaw = det.totalPagina ?? det.TotalPagina ?? det.totalPages ?? det.numeroPaginas
+  let totalPaginaReported: number | null = null
+  if (typeof tpRaw === "number" && Number.isFinite(tpRaw) && tpRaw > 0) {
+    totalPaginaReported = Math.trunc(tpRaw)
+  } else if (tpRaw != null) {
+    const n = parseInt(String(tpRaw).replace(/[^\d]/g, ""), 10)
+    totalPaginaReported = Number.isFinite(n) && n > 0 ? n : null
+  }
+
+  const ps = det.tamanoPagina ?? det.tamano ?? det.pageSize ?? det.rows ?? det.registrosPorPagina
   let pageSizeHint: number | null = null
   if (typeof ps === "number" && Number.isFinite(ps) && ps > 0) pageSizeHint = Math.trunc(ps)
   else if (ps != null) {
@@ -349,7 +364,7 @@ export function getConsultaDtePagedSlice(responseData: unknown): {
     pageSizeHint = Number.isFinite(n) && n > 0 ? n : null
   }
 
-  return { rows, totalReported, pageSizeHint }
+  return { rows, totalReported, pageSizeHint, totalPaginaReported }
 }
 
 export function isFelCodigoClientError(codigo: string | null | undefined): boolean {

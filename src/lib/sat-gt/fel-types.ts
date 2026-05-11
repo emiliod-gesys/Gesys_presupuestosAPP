@@ -29,6 +29,8 @@ export interface SatFelConsultaDiag {
   mensaje: string | null
   /** `detalle.total` del SAT (puede ser mayor que filas en `data` si hay paginación). */
   satTotalRegistros?: number | null
+  /** `detalle.totalPagina` u homólogo (útil si `data` viene vacío en la primera respuesta). */
+  satTotalPagina?: number | null
 }
 
 /** Pistas de forma del JSON (sin datos sensibles). */
