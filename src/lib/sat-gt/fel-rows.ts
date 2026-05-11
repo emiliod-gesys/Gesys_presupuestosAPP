@@ -88,9 +88,27 @@ const UUID_KEYS = [
   "NumeroAutorizacionUuid",
 ]
 
+function uuidFromFelValue(v: unknown): string | null {
+  if (v == null) return null
+  if (typeof v === "string") {
+    const t = v.trim()
+    return t || null
+  }
+  if (isRecord(v) && typeof v._ === "string") {
+    const t = v._.trim()
+    return t || null
+  }
+  return null
+}
+
 function pickUuid(raw: Record<string, unknown>): string | null {
   const u = pickStr(raw, UUID_KEYS)
-  return u?.trim() || null
+  if (u?.trim()) return u.trim()
+  for (const k of ["numeroAutorizacion", "NumeroAutorizacion", "numero_autorizacion"]) {
+    const got = uuidFromFelValue(raw[k])
+    if (got) return got
+  }
+  return null
 }
 
 /** UUID / clave de deduplicación entre páginas de consulta-dte. */
@@ -198,6 +216,11 @@ export function unwrapFelConsultaResponse(responseData: unknown): unknown {
       return responseData
     }
   }
+  /** Algunos proxies serializan la respuesta como `[{ codigo, descripcion, detalle }]` en lugar de objeto. */
+  if (Array.isArray(root) && root.length > 0 && isRecord(root[0])) {
+    const first = root[0]
+    if ("detalle" in first || "codigo" in first || "descripcion" in first) return first
+  }
   if (!isRecord(root)) return root
   const d = root.detalle
   if (typeof d === "string") {
@@ -226,12 +249,20 @@ export function normalizeFelDetalleData(data: unknown): unknown {
   return data
 }
 
+function recordLooksFelShaped(rec: Record<string, unknown>): boolean {
+  if (pickUuid(rec) != null) return true
+  if (extractFelAmount(rec) != null) return true
+  return Object.keys(rec).some((k) => /nit(emisor|receptor|proveedor)|tipoDte|serie|numero|autorizacion|dte|fel/i.test(k))
+}
+
 function recordsFromMaybeArrayOrMap(v: unknown): Record<string, unknown>[] {
   const norm = normalizeFelDetalleData(v)
   if (Array.isArray(norm)) return arrayOfRecords(norm)
   if (isRecord(norm)) {
     const vals = Object.values(norm).filter(isRecord)
     if (vals.length > 0) return vals
+    /** Un solo DTE a veces viene como objeto en `data`, no como array de un elemento. */
+    if (recordLooksFelShaped(norm)) return [norm]
   }
   return []
 }
@@ -349,10 +380,7 @@ export function getConsultaDtePagedSlice(responseData: unknown): {
     return { rows: [], totalReported: 0, pageSizeHint: null, totalPaginaReported: null }
   }
 
-  const dataNorm = normalizeFelDetalleData(det.data)
-  let rows: Record<string, unknown>[] = []
-  if (Array.isArray(dataNorm)) rows = arrayOfRecords(dataNorm)
-  else if (isRecord(dataNorm)) rows = Object.values(dataNorm).filter(isRecord)
+  const rows = recordsFromMaybeArrayOrMap(det.data)
 
   const totalRaw = det.total ?? det.Total ?? det.totalRegistros ?? det.totalElementos
   let totalReported = 0
