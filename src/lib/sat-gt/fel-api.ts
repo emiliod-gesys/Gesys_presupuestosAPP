@@ -37,9 +37,14 @@ export async function fetchFelConsultaDte(
   const fmt = opts?.dateFormat ?? "iso"
   const s = fmt === "ddmmyyyy" ? isoDateToDdMmYyyy(startDate) : startDate
   const e = fmt === "ddmmyyyy" ? isoDateToDdMmYyyy(endDate) : endDate
+  /** Compras (R): el contribuyente es receptor; sin NIT aquí el SAT a veces devuelve `data` vacío con ACCEPTED. */
+  const nitReceptor =
+    process.env.SAT_FEL_OMIT_NIT_RECEPTOR !== "1" && operationType === "R" && user.trim() !== ""
+      ? encodeURIComponent(user.trim())
+      : ""
   let url =
     `https://felcons.c.sat.gob.gt/dte-agencia-virtual/api/consulta-dte?usuario=${encodeURIComponent(user)}` +
-    `&tipoOperacion=${operationType}&establecimiento=&tipoDte=&noAutorizacion=&nitIdReceptor=&estadoDte=&serie=&numero=&moneda=&montoTotalRangoIni=&montoTotalRangoFinal=&impuesto=&nitCertificador=&resultado=&fechaEmisionIni=${encodeURIComponent(s)}&fechaEmisionFinal=${encodeURIComponent(e)}`
+    `&tipoOperacion=${operationType}&establecimiento=&tipoDte=&noAutorizacion=&nitIdReceptor=${nitReceptor}&estadoDte=&serie=&numero=&moneda=&montoTotalRangoIni=&montoTotalRangoFinal=&impuesto=&nitCertificador=&resultado=&fechaEmisionIni=${encodeURIComponent(s)}&fechaEmisionFinal=${encodeURIComponent(e)}`
   if (opts?.pagina != null && opts.pagina > 0) {
     url += `&pagina=${encodeURIComponent(String(opts.pagina))}`
   }
@@ -213,9 +218,13 @@ export async function fetchFelZipXmlLines(
   const fmt = opts?.dateFormat ?? "iso"
   const s = fmt === "ddmmyyyy" ? isoDateToDdMmYyyy(startDate) : startDate
   const e = fmt === "ddmmyyyy" ? isoDateToDdMmYyyy(endDate) : endDate
+  const nitReceptorZip =
+    process.env.SAT_FEL_OMIT_NIT_RECEPTOR !== "1" && operationType === "R" && user.trim() !== ""
+      ? encodeURIComponent(user.trim())
+      : ""
   const url =
     `https://felcons.c.sat.gob.gt/dte-agencia-virtual/api/consulta-dte/zip-xml?usuario=${encodeURIComponent(user)}` +
-    `&tipoOperacion=${operationType}&establecimiento=0&tipoDte=TDS&noAutorizacion=&nitIdReceptor=&estadoDte=TDS&serie=&numero=&moneda=TDS&montoTotalRangoIni=&montoTotalRangoFinal=&impuesto=&nitCertificador=&resultado=&fechaEmisionIni=${encodeURIComponent(s)}&fechaEmisionFinal=${encodeURIComponent(e)}`
+    `&tipoOperacion=${operationType}&establecimiento=0&tipoDte=TDS&noAutorizacion=&nitIdReceptor=${nitReceptorZip}&estadoDte=TDS&serie=&numero=&moneda=TDS&montoTotalRangoIni=&montoTotalRangoFinal=&impuesto=&nitCertificador=&resultado=&fechaEmisionIni=${encodeURIComponent(s)}&fechaEmisionFinal=${encodeURIComponent(e)}`
 
   const response = await axios.post<ArrayBuffer>(url, bodyRows, {
     headers: {

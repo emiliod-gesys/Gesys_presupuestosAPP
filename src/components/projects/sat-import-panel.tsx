@@ -278,12 +278,17 @@ export function SatImportPanel({
                 {(diagnostics.felDateFormatUsed ?? "iso") === "ddmmyyyy" && " (dd/MM/yyyy)"}
                 {(diagnostics.felDateFormatUsed ?? "iso") === "iso" && " (YYYY-MM-DD)"}
               </p>
+              <p className="text-gray-600">
+                Compras (tipo <span className="font-mono">R</span>): el mismo NIT se envía en{" "}
+                <span className="font-mono">nitIdReceptor</span> (el SAT suele exigirlo para listar facturas recibidas).
+                Si el despliegue devolviera error de consulta, en el servidor puedes definir{" "}
+                <span className="font-mono">SAT_FEL_OMIT_NIT_RECEPTOR=1</span> para volver al comportamiento anterior.
+              </p>
               <ul className="list-none space-y-1.5 font-mono text-[11px]">
                 <li>
                   Emitidos (E): crudos {diagnostics.emitidos.rawListLength} → importables{" "}
                   {diagnostics.emitidos.normalizedCount}
                   {diagnostics.emitidos.satTotalRegistros != null &&
-                    diagnostics.emitidos.satTotalRegistros > diagnostics.emitidos.rawListLength &&
                     ` · total SAT ${diagnostics.emitidos.satTotalRegistros}`}
                   {diagnostics.emitidos.satTotalPagina != null && diagnostics.emitidos.satTotalPagina > 0
                     ? ` · totalPagina SAT ${diagnostics.emitidos.satTotalPagina}`
@@ -295,7 +300,6 @@ export function SatImportPanel({
                   Recibidos / compras (R): crudos {diagnostics.recibidos.rawListLength} → importables{" "}
                   {diagnostics.recibidos.normalizedCount}
                   {diagnostics.recibidos.satTotalRegistros != null &&
-                    diagnostics.recibidos.satTotalRegistros > diagnostics.recibidos.rawListLength &&
                     ` · total SAT ${diagnostics.recibidos.satTotalRegistros}`}
                   {diagnostics.recibidos.satTotalPagina != null && diagnostics.recibidos.satTotalPagina > 0
                     ? ` · totalPagina SAT ${diagnostics.recibidos.satTotalPagina}`
@@ -316,6 +320,12 @@ export function SatImportPanel({
                         }]`
                       : ""}{" "}
                     · mayor array visto: {diagnostics.responseHints.emitidos.maxArrayLengthSeen} ítems
+                    {diagnostics.responseHints.emitidos.detalleDataKind != null &&
+                      ` · detalle.data: ${diagnostics.responseHints.emitidos.detalleDataKind}${
+                        diagnostics.responseHints.emitidos.detalleDataEntryCount != null
+                          ? ` (${diagnostics.responseHints.emitidos.detalleDataEntryCount})`
+                          : ""
+                      }`}
                   </p>
                   <p className="font-medium text-gray-800">Forma del JSON (recibidos)</p>
                   <p>
@@ -327,6 +337,12 @@ export function SatImportPanel({
                         }]`
                       : ""}{" "}
                     · mayor array visto: {diagnostics.responseHints.recibidos.maxArrayLengthSeen} ítems
+                    {diagnostics.responseHints.recibidos.detalleDataKind != null &&
+                      ` · detalle.data: ${diagnostics.responseHints.recibidos.detalleDataKind}${
+                        diagnostics.responseHints.recibidos.detalleDataEntryCount != null
+                          ? ` (${diagnostics.responseHints.recibidos.detalleDataEntryCount})`
+                          : ""
+                      }`}
                   </p>
                 </div>
               )}

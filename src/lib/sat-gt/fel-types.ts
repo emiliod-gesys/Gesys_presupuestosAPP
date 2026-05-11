@@ -39,6 +39,10 @@ export interface SatFelResponseShapeHint {
   detalleKind: string
   detalleKeys: string[] | null
   maxArrayLengthSeen: number
+  /** Tras normalizar string JSON: tipo de `detalle.data`. */
+  detalleDataKind?: string | null
+  /** Longitud del array `data`, caracteres si es string, o número de claves si es objeto. */
+  detalleDataEntryCount?: number | null
 }
 
 export interface SatFelRunDiagnostics {

@@ -423,10 +423,19 @@ export function describeFelResponseShape(responseData: unknown): {
   detalleKind: string
   detalleKeys: string[] | null
   maxArrayLengthSeen: number
+  detalleDataKind: string | null
+  detalleDataEntryCount: number | null
 } {
   const root = unwrapFelConsultaResponse(responseData)
   if (!isRecord(root)) {
-    return { rootKeys: [], detalleKind: typeof root, detalleKeys: null, maxArrayLengthSeen: 0 }
+    return {
+      rootKeys: [],
+      detalleKind: typeof root,
+      detalleKeys: null,
+      maxArrayLengthSeen: 0,
+      detalleDataKind: null,
+      detalleDataEntryCount: null,
+    }
   }
   const rootKeys = Object.keys(root)
   const det = root.detalle
@@ -447,11 +456,35 @@ export function describeFelResponseShape(responseData: unknown): {
     if (isRecord(v)) for (const x of Object.values(v)) walk(x, d + 1)
   }
   walk(root, 0)
+  let detalleDataKind: string | null = null
+  let detalleDataEntryCount: number | null = null
   if (isRecord(det)) {
     const dn = normalizeFelDetalleData(det.data)
-    if (Array.isArray(dn)) maxLen = Math.max(maxLen, dn.length)
+    if (dn == null) {
+      detalleDataKind = "null"
+      detalleDataEntryCount = 0
+    } else if (Array.isArray(dn)) {
+      detalleDataKind = "array"
+      detalleDataEntryCount = dn.length
+      maxLen = Math.max(maxLen, dn.length)
+    } else if (typeof dn === "string") {
+      detalleDataKind = "string"
+      detalleDataEntryCount = dn.length
+    } else if (isRecord(dn)) {
+      detalleDataKind = "object"
+      detalleDataEntryCount = Object.keys(dn).length
+    } else {
+      detalleDataKind = typeof dn
+    }
   }
-  return { rootKeys, detalleKind, detalleKeys, maxArrayLengthSeen: maxLen }
+  return {
+    rootKeys,
+    detalleKind,
+    detalleKeys,
+    maxArrayLengthSeen: maxLen,
+    detalleDataKind,
+    detalleDataEntryCount,
+  }
 }
 
 /** Código y mensaje habituales en respuestas FEL. */
