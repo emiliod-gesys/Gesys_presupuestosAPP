@@ -93,6 +93,25 @@ export async function fetchFelConsultaDteMergedPages(
     })
   }
 
+  /** Algunos despliegues del SAT devuelven `data` vacío solo con `pagina`; con `tamanoPagina` sí hay filas. */
+  async function consultaPagina(p: number): Promise<{ r: unknown; sn: ReturnType<typeof getConsultaDtePagedSlice> }> {
+    let r = await one({ pagina: p })
+    let sn = getConsultaDtePagedSlice(r)
+    if (isFelCodigoClientError(felMessageFromResponse(r).codigo)) {
+      const r2 = await one({ pagina: p, tamanoPagina: 20 })
+      if (!isFelCodigoClientError(felMessageFromResponse(r2).codigo)) {
+        return { r: r2, sn: getConsultaDtePagedSlice(r2) }
+      }
+      return { r, sn }
+    }
+    if (sn.rows.length > 0) return { r, sn }
+    const r2 = await one({ pagina: p, tamanoPagina: 20 })
+    if (isFelCodigoClientError(felMessageFromResponse(r2).codigo)) return { r, sn }
+    const sn2 = getConsultaDtePagedSlice(r2)
+    if (sn2.rows.length > 0 || sn2.totalReported > sn.totalReported) return { r: r2, sn: sn2 }
+    return { r, sn }
+  }
+
   let resp = await one({})
   const code0 = felMessageFromResponse(resp).codigo
   if (isFelCodigoClientError(code0)) {
@@ -125,22 +144,16 @@ export async function fetchFelConsultaDteMergedPages(
       120,
       Math.max(tp0, total > 0 ? Math.ceil(total / hint) + 2 : 5)
     )
-    let emptyStreak = 0
     for (let p = 1; p <= maxFirstPass; p++) {
-      const r = await one({ pagina: p })
+      const { r, sn } = await consultaPagina(p)
       const c = felMessageFromResponse(r).codigo
       if (isFelCodigoClientError(c)) break
-      const sn = getConsultaDtePagedSlice(r)
       const before = merged.length
       pushDedup(sn.rows)
       total = Math.max(total, sn.totalReported)
       if (sn.rows.length > 0) {
         resp = r
         slice = sn
-        emptyStreak = 0
-      } else {
-        emptyStreak++
-        if (p > 1 && emptyStreak >= 2) break
       }
       if (total > 0 && merged.length >= total) break
     }
@@ -152,10 +165,9 @@ export async function fetchFelConsultaDteMergedPages(
   const maxPages = 120
 
   while (merged.length < total && page <= maxPages) {
-    let r = await one({ pagina: page })
-    let c = felMessageFromResponse(r).codigo
+    const { r, sn: next } = await consultaPagina(page)
+    const c = felMessageFromResponse(r).codigo
     if (isFelCodigoClientError(c)) break
-    const next = getConsultaDtePagedSlice(r)
     if (next.rows.length === 0) break
     const before = merged.length
     pushDedup(next.rows)

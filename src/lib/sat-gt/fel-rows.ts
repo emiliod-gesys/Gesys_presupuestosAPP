@@ -211,10 +211,26 @@ export function unwrapFelConsultaResponse(responseData: unknown): unknown {
   return root
 }
 
+/** El SAT a veces serializa `detalle.data` como string JSON en lugar de array. */
+export function normalizeFelDetalleData(data: unknown): unknown {
+  if (data == null) return data
+  if (typeof data === "string") {
+    const t = data.trim()
+    if (!t) return []
+    try {
+      return JSON.parse(t) as unknown
+    } catch {
+      return data
+    }
+  }
+  return data
+}
+
 function recordsFromMaybeArrayOrMap(v: unknown): Record<string, unknown>[] {
-  if (Array.isArray(v)) return arrayOfRecords(v)
-  if (isRecord(v)) {
-    const vals = Object.values(v).filter(isRecord)
+  const norm = normalizeFelDetalleData(v)
+  if (Array.isArray(norm)) return arrayOfRecords(norm)
+  if (isRecord(norm)) {
+    const vals = Object.values(norm).filter(isRecord)
     if (vals.length > 0) return vals
   }
   return []
@@ -333,9 +349,10 @@ export function getConsultaDtePagedSlice(responseData: unknown): {
     return { rows: [], totalReported: 0, pageSizeHint: null, totalPaginaReported: null }
   }
 
+  const dataNorm = normalizeFelDetalleData(det.data)
   let rows: Record<string, unknown>[] = []
-  if (Array.isArray(det.data)) rows = arrayOfRecords(det.data)
-  else if (isRecord(det.data)) rows = Object.values(det.data).filter(isRecord)
+  if (Array.isArray(dataNorm)) rows = arrayOfRecords(dataNorm)
+  else if (isRecord(dataNorm)) rows = Object.values(dataNorm).filter(isRecord)
 
   const totalRaw = det.total ?? det.Total ?? det.totalRegistros ?? det.totalElementos
   let totalReported = 0
@@ -402,8 +419,9 @@ export function describeFelResponseShape(responseData: unknown): {
     if (isRecord(v)) for (const x of Object.values(v)) walk(x, d + 1)
   }
   walk(root, 0)
-  if (isRecord(det) && Array.isArray(det.data)) {
-    maxLen = Math.max(maxLen, det.data.length)
+  if (isRecord(det)) {
+    const dn = normalizeFelDetalleData(det.data)
+    if (Array.isArray(dn)) maxLen = Math.max(maxLen, dn.length)
   }
   return { rootKeys, detalleKind, detalleKeys, maxArrayLengthSeen: maxLen }
 }
