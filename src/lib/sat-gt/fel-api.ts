@@ -23,6 +23,7 @@ export type FelConsultaDteOpts = {
   /** Paginación (portal FEL): suele ir con `tamanoPagina`. */
   pagina?: number
   tamanoPagina?: number
+  onCheckpoint?: (stage: string, detail?: string) => void
 }
 
 export async function fetchFelConsultaDte(
@@ -80,6 +81,12 @@ export async function fetchFelConsultaDte(
  * La **primera** petición va **sin** `pagina`/`tamanoPagina` (igual que integraciones clásicas); el SAT
  * responde BAD_REQUEST si se envían parámetros de paginación que no espera.
  */
+export type FelConsultaDteMergedOpts = {
+  dateFormat?: FelConsultaDateFormat
+  /** Trazas internas (fusión de páginas); no incluir datos sensibles en `detail`. */
+  onCheckpoint?: (stage: string, detail?: string) => void
+}
+
 export async function fetchFelConsultaDteMergedPages(
   token: string,
   cookieHeader: string,
@@ -87,9 +94,11 @@ export async function fetchFelConsultaDteMergedPages(
   startDate: string,
   endDate: string,
   operationType: "E" | "R",
-  opts?: { dateFormat?: FelConsultaDateFormat }
+  opts?: FelConsultaDteMergedOpts
 ): Promise<unknown> {
   const fmt = opts?.dateFormat ?? "iso"
+  const k = opts?.onCheckpoint
+  k?.("start", `fmt=${fmt}`)
 
   async function one(extra: FelConsultaDteOpts): Promise<unknown> {
     return fetchFelConsultaDte(token, cookieHeader, user, startDate, endDate, operationType, {
@@ -120,10 +129,15 @@ export async function fetchFelConsultaDteMergedPages(
   let resp = await one({})
   const code0 = felMessageFromResponse(resp).codigo
   if (isFelCodigoClientError(code0)) {
+    k?.("client_error_first", String(code0 ?? ""))
     return resp
   }
 
   let slice = getConsultaDtePagedSlice(resp)
+  k?.(
+    "first_response",
+    `code=${code0 ?? "?"} rows=${slice.rows.length} total=${slice.totalReported} totalPagina=${slice.totalPaginaReported ?? 0}`
+  )
   const merged: Record<string, unknown>[] = []
   const seen = new Set<string>()
   const pushDedup = (rows: Record<string, unknown>[]) => {
@@ -162,6 +176,7 @@ export async function fetchFelConsultaDteMergedPages(
       }
       if (total > 0 && merged.length >= total) break
     }
+    k?.("page_scan_end", `merged=${merged.length} total=${total}`)
   }
 
   const pageSizeSlice = getConsultaDtePagedSlice(resp)
@@ -181,6 +196,8 @@ export async function fetchFelConsultaDteMergedPages(
     page++
     if (next.rows.length < pageSize * 0.5 && merged.length >= total) break
   }
+
+  k?.("merged", `rows=${merged.length} total=${Math.max(total, merged.length)} last_page=${page - 1}`)
 
   const base = unwrapFelConsultaResponse(resp)
   if (typeof base !== "object" || base == null || !("detalle" in base)) return resp
@@ -216,6 +233,7 @@ export async function fetchFelZipXmlLines(
   if (!Array.isArray(bodyRows) || bodyRows.length === 0) return []
 
   const fmt = opts?.dateFormat ?? "iso"
+  opts?.onCheckpoint?.("start", `body_rows=${bodyRows.length}`)
   const s = fmt === "ddmmyyyy" ? isoDateToDdMmYyyy(startDate) : startDate
   const e = fmt === "ddmmyyyy" ? isoDateToDdMmYyyy(endDate) : endDate
   const nitReceptorZip =
@@ -235,8 +253,10 @@ export async function fetchFelZipXmlLines(
     },
     responseType: "arraybuffer",
   })
+  const buf = response.data
+  opts?.onCheckpoint?.("http_ok", `bytes=${buf instanceof ArrayBuffer ? buf.byteLength : "?"}`)
 
-  const zip = await JSZip.loadAsync(response.data)
+  const zip = await JSZip.loadAsync(buf)
   const converted: FelXmlConverted[] = []
 
   for (const filename of Object.keys(zip.files)) {
@@ -284,5 +304,6 @@ export async function fetchFelZipXmlLines(
     }
   }
 
+  opts?.onCheckpoint?.("done", `xml_docs=${converted.length}`)
   return converted
 }

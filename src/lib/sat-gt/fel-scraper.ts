@@ -14,14 +14,14 @@ import {
   isFelCodigoClientError,
   normalizeSatDteRecord,
 } from "./fel-rows"
-import type { SatDteListRow, SatFelRunDiagnostics } from "./fel-types"
+import type { SatDteListRow, SatFelCheckpoint, SatFelRunDiagnostics } from "./fel-types"
 
 /**
  * Entornos cloud (Vercel, Lambda, etc.) suelen usar HOME tipo /home/sbx_user… sin caché de Puppeteer.
  * No confiar solo en VERCEL==="1" (a veces falta o difiere); @sparticuz/chromium + puppeteer-core evitan el error
  * "Could not find Chrome".
  */
-function shouldUsePackagedChromium(): boolean {
+export function shouldUsePackagedChromium(): boolean {
   if (process.env.SAT_PACKAGED_CHROMIUM === "0") return false
   if (process.env.SAT_PACKAGED_CHROMIUM === "1") return true
   // Usuario fuerza Chrome del sistema (evita binario empaquetado)
@@ -141,6 +141,15 @@ export async function runSatFelExtraction(opts: {
   dateTo: string
 }): Promise<{ rows: SatDteListRow[]; warnings: string[]; diagnostics: SatFelRunDiagnostics }> {
   const warnings: string[] = []
+  const runStarted = Date.now()
+  const checkpoints: SatFelCheckpoint[] = []
+  const cp = (stage: string, detail?: string) => {
+    const row: SatFelCheckpoint = { stage, atMs: Date.now() - runStarted }
+    if (detail != null && detail !== "") row.detail = detail
+    checkpoints.push(row)
+  }
+
+  cp("sat.run_start", `range=${opts.dateFrom}..${opts.dateTo}`)
   const username = opts.portalLogin.trim()
   const apiUsuario = opts.felConsultaUsuario.trim() || username
   const password = opts.portalPassword
@@ -148,15 +157,19 @@ export async function runSatFelExtraction(opts: {
   if (!apiUsuario) throw new Error("Falta NIT o usuario para consultar DTE en la API del SAT.")
 
   const headless = process.env.SAT_PUPPETEER_HEADLESS?.toLowerCase() !== "false"
+  cp("sat.browser_launch", `headless=${headless} chromium=${shouldUsePackagedChromium() ? "packaged" : "local"}`)
   let browser: Browser | null = await launchSatBrowser(headless)
+  cp("sat.browser_ready")
 
   let token: string
   let cookieHeader: string
 
   try {
     const page = await browser.newPage()
+    cp("sat.page_new")
     page.setDefaultTimeout(60000)
     await page.goto("https://farm3.sat.gob.gt/menu/login.jsf", { waitUntil: "domcontentloaded" })
+    cp("sat.farm3_login_loaded")
 
     await page.waitForSelector("#formContent\\:username", { visible: true })
     await page.type("#formContent\\:username", username, { delay: 15 })
@@ -164,6 +177,7 @@ export async function runSatFelExtraction(opts: {
     await page.type("#formContent\\:password", password, { delay: 15 })
     await page.click("#formContent\\:cmdbtnIngresar")
     await new Promise((r) => setTimeout(r, 1200))
+    cp("sat.credentials_submitted")
 
     const errorMessage = await page.$("#formContent\\:otMensaje").catch(() => null)
     if (errorMessage) {
@@ -173,6 +187,7 @@ export async function runSatFelExtraction(opts: {
 
     await new Promise((r) => setTimeout(r, 4000))
     await page.waitForSelector("#btnContraerMenu", { visible: true, timeout: 45000 })
+    cp("sat.post_login_menu_visible")
     await page.click("#btnContraerMenu")
     await new Promise((r) => setTimeout(r, 400))
     await page.locator("text/Servicios Tributarios").hover()
@@ -184,6 +199,7 @@ export async function runSatFelExtraction(opts: {
     await page.goto("https://felcons.c.sat.gob.gt/dte-agencia-virtual/dte-consulta", {
       waitUntil: "domcontentloaded",
     })
+    cp("sat.felcons_consulta_page")
 
     const { accessTokenCookie, cookies } = await getAccessTokenCookie(page, 25000)
     if (!accessTokenCookie?.value) {
@@ -193,6 +209,7 @@ export async function runSatFelExtraction(opts: {
     }
     token = accessTokenCookie.value
     cookieHeader = buildCookieHeader(cookies)
+    cp("sat.access_token_ready", `cookies=${cookies.length}`)
 
     await browser.close()
     browser = null
@@ -201,10 +218,18 @@ export async function runSatFelExtraction(opts: {
       await browser.close().catch(() => {})
       browser = null
     }
+    cp("sat.browser_phase_error", (e as Error).message?.slice(0, 200) ?? "unknown")
     throw e
   }
 
+  const mergeCp =
+    (op: "E" | "R") =>
+    (stage: string, detail?: string) => {
+      cp(`sat.merge_${op === "E" ? "emitidos" : "recibidos"}.${stage}`, detail)
+    }
+
   let dateFormatUsed: FelConsultaDateFormat = "iso"
+  cp("sat.api_consulta_emitidos_start")
   const preSalesIso = await fetchFelConsultaDteMergedPages(
     token,
     cookieHeader,
@@ -212,8 +237,9 @@ export async function runSatFelExtraction(opts: {
     opts.dateFrom,
     opts.dateTo,
     "E",
-    { dateFormat: "iso" }
+    { dateFormat: "iso", onCheckpoint: mergeCp("E") }
   )
+  cp("sat.api_consulta_recibidos_start")
   const prePurchasesIso = await fetchFelConsultaDteMergedPages(
     token,
     cookieHeader,
@@ -221,19 +247,24 @@ export async function runSatFelExtraction(opts: {
     opts.dateFrom,
     opts.dateTo,
     "R",
-    { dateFormat: "iso" }
+    { dateFormat: "iso", onCheckpoint: mergeCp("R") }
   )
 
   let preSales = preSalesIso
   let prePurchases = prePurchasesIso
   let salesList = extractConsultaDteList(preSales)
   let purchaseList = extractConsultaDteList(prePurchases)
+  cp(
+    "sat.extract_lists_iso",
+    `emitidos_raw=${salesList.length} recibidos_raw=${purchaseList.length}`
+  )
 
   if (
     process.env.SAT_FEL_TRY_DDMM === "1" &&
     salesList.length === 0 &&
     purchaseList.length === 0
   ) {
+    cp("sat.retry_ddmm_start")
     const preSalesDd = await fetchFelConsultaDteMergedPages(
       token,
       cookieHeader,
@@ -241,7 +272,7 @@ export async function runSatFelExtraction(opts: {
       opts.dateFrom,
       opts.dateTo,
       "E",
-      { dateFormat: "ddmmyyyy" }
+      { dateFormat: "ddmmyyyy", onCheckpoint: mergeCp("E") }
     )
     const prePurchasesDd = await fetchFelConsultaDteMergedPages(
       token,
@@ -250,7 +281,7 @@ export async function runSatFelExtraction(opts: {
       opts.dateFrom,
       opts.dateTo,
       "R",
-      { dateFormat: "ddmmyyyy" }
+      { dateFormat: "ddmmyyyy", onCheckpoint: mergeCp("R") }
     )
     const codeE = felMessageFromResponse(preSalesDd).codigo
     const codeR = felMessageFromResponse(prePurchasesDd).codigo
@@ -267,9 +298,12 @@ export async function runSatFelExtraction(opts: {
       prePurchases = prePurchasesDd
       salesList = salesDd
       purchaseList = purchaseDd
+      cp("sat.retry_ddmm_ok", `emitidos_raw=${salesList.length} recibidos_raw=${purchaseList.length}`)
       warnings.push(
         "SAT_FEL_TRY_DDMM=1: se usaron fechas dd/MM/yyyy en la URL y hubo filas. Si no lo necesitas, quita la variable de entorno."
       )
+    } else {
+      cp("sat.retry_ddmm_skip", "sin filas o error cliente en reintento dd/MM")
     }
   }
 
@@ -279,6 +313,7 @@ export async function runSatFelExtraction(opts: {
   let xmlSales: FelXmlConverted[] = []
   let xmlPurchases: FelXmlConverted[] = []
   try {
+    cp("sat.zip_xml_emitidos_start", `body_rows=${salesList.length}`)
     xmlSales = await fetchFelZipXmlLines(
       token,
       cookieHeader,
@@ -287,12 +322,18 @@ export async function runSatFelExtraction(opts: {
       opts.dateTo,
       "E",
       salesList,
-      { dateFormat: dateFormatUsed }
+      {
+        dateFormat: dateFormatUsed,
+        onCheckpoint: (stage, detail) => cp(`sat.zip_emitidos.${stage}`, detail),
+      }
     )
+    cp("sat.zip_xml_emitidos_done", `xml_docs=${xmlSales.length}`)
   } catch (e) {
+    cp("sat.zip_xml_emitidos_error", (e as Error).message?.slice(0, 160) ?? "error")
     warnings.push(`No se pudieron cargar líneas de detalle (emitidos): ${(e as Error).message}`)
   }
   try {
+    cp("sat.zip_xml_recibidos_start", `body_rows=${purchaseList.length}`)
     xmlPurchases = await fetchFelZipXmlLines(
       token,
       cookieHeader,
@@ -301,9 +342,14 @@ export async function runSatFelExtraction(opts: {
       opts.dateTo,
       "R",
       purchaseList,
-      { dateFormat: dateFormatUsed }
+      {
+        dateFormat: dateFormatUsed,
+        onCheckpoint: (stage, detail) => cp(`sat.zip_recibidos.${stage}`, detail),
+      }
     )
+    cp("sat.zip_xml_recibidos_done", `xml_docs=${xmlPurchases.length}`)
   } catch (e) {
+    cp("sat.zip_xml_recibidos_error", (e as Error).message?.slice(0, 160) ?? "error")
     warnings.push(`No se pudieron cargar líneas de detalle (recibidos): ${(e as Error).message}`)
   }
 
@@ -328,6 +374,10 @@ export async function runSatFelExtraction(opts: {
     if (da !== db) return db.localeCompare(da)
     return a.uuid.localeCompare(b.uuid)
   })
+  cp(
+    "sat.normalize_done",
+    `rows_ui=${rows.length} raw_emitidos=${salesList.length} raw_recibidos=${purchaseList.length}`
+  )
 
   const normE = countNormalizedRows(salesList, "E")
   const normR = countNormalizedRows(purchaseList, "R")
@@ -364,10 +414,12 @@ export async function runSatFelExtraction(opts: {
     }
   }
 
+  cp("sat.run_complete", `rows=${rows.length}`)
   const diagnostics: SatFelRunDiagnostics = {
     felConsultaUsuario: apiUsuario,
     felDateFormatUsed: dateFormatUsed,
     responseHints: { emitidos: hintE, recibidos: hintR },
+    checkpoints,
     emitidos: {
       rawListLength: salesList.length,
       normalizedCount: normE,

@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Select } from "@/components/ui/select"
 import { useToast } from "@/components/ui/toast"
 import { formatCurrency, cn } from "@/lib/utils"
-import type { SatDteListRow, SatFelRunDiagnostics } from "@/lib/sat-gt/fel-types"
+import type { SatDteListRow, SatFelCheckpoint, SatFelRunDiagnostics } from "@/lib/sat-gt/fel-types"
 import { Download, FileSpreadsheet } from "lucide-react"
 
 type Opt = { value: string; label: string }
@@ -48,6 +48,7 @@ export function SatImportPanel({
   const [rows, setRows] = useState<SatDteListRow[]>([])
   const [warnings, setWarnings] = useState<string[]>([])
   const [diagnostics, setDiagnostics] = useState<SatFelRunDiagnostics | null>(null)
+  const [importCheckpoints, setImportCheckpoints] = useState<SatFelCheckpoint[] | null>(null)
   const [loading, setLoading] = useState(false)
   const [importing, setImporting] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -71,6 +72,7 @@ export function SatImportPanel({
     setLoading(true)
     setWarnings([])
     setDiagnostics(null)
+    setImportCheckpoints(null)
     try {
       const res = await fetch(`/api/projects/${projectId}/sat/list`, {
         method: "POST",
@@ -151,8 +153,12 @@ export function SatImportPanel({
       const data = await res.json()
       if (!res.ok) {
         toast("error", data.message || "Error al importar")
+        const ic = data.checkpoints as SatFelCheckpoint[] | undefined
+        setImportCheckpoints(Array.isArray(ic) ? ic : null)
         return
       }
+      const ic = data.checkpoints as SatFelCheckpoint[] | undefined
+      setImportCheckpoints(Array.isArray(ic) ? ic : null)
       const parts = [`Importadas: ${data.imported}`]
       if (data.skipped?.length) parts.push(`omitidas (ya existían): ${data.skipped.length}`)
       toast("success", parts.join(". "))
@@ -263,6 +269,40 @@ export function SatImportPanel({
                 <li key={i}>{w}</li>
               ))}
             </ul>
+          )}
+          {diagnostics?.checkpoints && diagnostics.checkpoints.length > 0 && (
+            <details className="rounded-lg border border-dashed border-gray-300 bg-white/60 p-3 text-xs">
+              <summary className="cursor-pointer font-medium text-gray-800">
+                Trazas del servidor — extracción SAT ({diagnostics.checkpoints.length} pasos)
+              </summary>
+              <p className="mt-2 text-[10px] text-gray-500">
+                Tiempos relativos al inicio de la solicitud. No incluye secretos; sirve para ver en qué fase se detiene
+                el flujo (navegador, consulta-dte, zip-xml, normalización).
+              </p>
+              <ul className="mt-2 max-h-48 overflow-y-auto font-mono text-[10px] text-gray-700 space-y-0.5">
+                {diagnostics.checkpoints.map((c, i) => (
+                  <li key={i}>
+                    <span className="text-gray-400">+{c.atMs}ms</span> {c.stage}
+                    {c.detail ? <span className="text-gray-600"> — {c.detail}</span> : null}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
+          {importCheckpoints && importCheckpoints.length > 0 && (
+            <details className="rounded-lg border border-dashed border-amber-200/80 bg-amber-50/40 p-3 text-xs">
+              <summary className="cursor-pointer font-medium text-gray-800">
+                Trazas del servidor — importación a transacciones ({importCheckpoints.length} pasos)
+              </summary>
+              <ul className="mt-2 max-h-40 overflow-y-auto font-mono text-[10px] text-gray-700 space-y-0.5">
+                {importCheckpoints.map((c, i) => (
+                  <li key={i}>
+                    <span className="text-gray-400">+{c.atMs}ms</span> {c.stage}
+                    {c.detail ? <span className="text-gray-600"> — {c.detail}</span> : null}
+                  </li>
+                ))}
+              </ul>
+            </details>
           )}
           {diagnostics && rows.length === 0 && (
             <div className="rounded-lg border border-gray-200 bg-gray-50/90 p-4 text-xs text-gray-700 space-y-2">

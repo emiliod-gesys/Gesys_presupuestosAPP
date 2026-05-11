@@ -21,6 +21,14 @@ export function satFelExternalRef(uuid: string): string {
   return `sat-gt:fel:${uuid}`
 }
 
+/** Trazas de alto nivel (sin tokens ni contraseñas). */
+export interface SatFelCheckpoint {
+  stage: string
+  /** Milisegundos desde el inicio de la operación (extracción o importación). */
+  atMs: number
+  detail?: string
+}
+
 /** Resumen de la respuesta consulta-dte (para diagnóstico en UI). */
 export interface SatFelConsultaDiag {
   rawListLength: number
@@ -56,4 +64,6 @@ export interface SatFelRunDiagnostics {
     emitidos: SatFelResponseShapeHint
     recibidos: SatFelResponseShapeHint
   }
+  /** Orden cronológico: navegador, API consulta-dte, zip-xml, normalización. */
+  checkpoints?: SatFelCheckpoint[]
 }

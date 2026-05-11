@@ -1,7 +1,7 @@
 import { cookies } from "next/headers"
 import { createServerClient } from "@supabase/ssr"
 import { NextResponse } from "next/server"
-import { satFelExternalRef } from "@/lib/sat-gt/fel-types"
+import { satFelExternalRef, type SatFelCheckpoint } from "@/lib/sat-gt/fel-types"
 
 type ImportItem = {
   uuid: string
@@ -17,6 +17,15 @@ type ImportItem = {
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const projectId = (await params).id
+  const runStarted = Date.now()
+  const checkpoints: SatFelCheckpoint[] = []
+  const cp = (stage: string, detail?: string) => {
+    const row: SatFelCheckpoint = { stage, atMs: Date.now() - runStarted }
+    if (detail != null && detail !== "") row.detail = detail
+    checkpoints.push(row)
+  }
+
+  cp("import.request_start")
   const cookieStore = await cookies()
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -36,7 +45,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ message: "No autorizado" }, { status: 401 })
+  if (!user) {
+    cp("import.auth_failed")
+    return NextResponse.json({ message: "No autorizado", checkpoints }, { status: 401 })
+  }
+  cp("import.auth_ok")
 
   const { data: membership } = await supabase
     .from("project_members")
@@ -46,29 +59,47 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     .single()
 
   if (!membership || membership.role === "observer") {
-    return NextResponse.json({ message: "No tienes permiso para importar" }, { status: 403 })
+    cp("import.forbidden", membership ? "observer" : "no_member")
+    return NextResponse.json({ message: "No tienes permiso para importar", checkpoints }, { status: 403 })
   }
+  cp("import.membership_ok", membership.role)
 
   let body: { items?: ImportItem[] }
   try {
     body = await req.json()
   } catch {
-    return NextResponse.json({ message: "JSON inválido" }, { status: 400 })
+    cp("import.body_invalid")
+    return NextResponse.json({ message: "JSON inválido", checkpoints }, { status: 400 })
   }
 
   const items = Array.isArray(body.items) ? body.items : []
-  if (items.length === 0) return NextResponse.json({ message: "Sin ítems" }, { status: 400 })
-  if (items.length > 50) return NextResponse.json({ message: "Máximo 50 por solicitud" }, { status: 400 })
+  if (items.length === 0) {
+    cp("import.no_items")
+    return NextResponse.json({ message: "Sin ítems", checkpoints }, { status: 400 })
+  }
+  if (items.length > 50) {
+    cp("import.too_many_items", String(items.length))
+    return NextResponse.json({ message: "Máximo 50 por solicitud", checkpoints }, { status: 400 })
+  }
+  cp("import.items_received", `count=${items.length}`)
 
   const { data: project } = await supabase.from("projects").select("id, status").eq("id", projectId).single()
   if (!project || project.status === "archived") {
-    return NextResponse.json({ message: "Proyecto no disponible o archivado" }, { status: 400 })
+    cp("import.project_blocked", project?.status ?? "missing")
+    return NextResponse.json({ message: "Proyecto no disponible o archivado", checkpoints }, { status: 400 })
   }
+  cp("import.project_ok", project.status)
 
   let imported = 0
   const skipped: string[] = []
   const errors: string[] = []
+  let invalidItem = 0
+  let duplicateItem = 0
+  let categoryInvalid = 0
+  let typeInvalid = 0
 
+  let insertFailed = 0
+  cp("import.loop_start")
   for (const row of items) {
     if (
       !row ||
@@ -83,6 +114,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       typeof row.transactionTypeId !== "string"
     ) {
       errors.push("Ítem con datos inválidos omitido")
+      invalidItem++
       continue
     }
 
@@ -95,6 +127,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       .maybeSingle()
     if (dup) {
       skipped.push(row.name)
+      duplicateItem++
       continue
     }
 
@@ -106,6 +139,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       .maybeSingle()
     if (!cat) {
       errors.push(`${row.name}: categoría no pertenece al proyecto`)
+      categoryInvalid++
       continue
     }
 
@@ -116,6 +150,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       .maybeSingle()
     if (!tt || tt.type !== row.flow) {
       errors.push(`${row.name}: tipo de transacción incompatible con el documento (gasto/ingreso)`)
+      typeInvalid++
       continue
     }
 
@@ -141,10 +176,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     if (insErr) {
       errors.push(`${row.name}: ${insErr.message}`)
+      insertFailed++
     } else {
       imported++
     }
   }
 
-  return NextResponse.json({ imported, skipped, errors })
+  cp(
+    "import.loop_done",
+    `imported=${imported} insert_failed=${insertFailed} skipped_dup=${duplicateItem} invalid=${invalidItem} category_bad=${categoryInvalid} type_bad=${typeInvalid} errors_msg=${errors.length}`
+  )
+  return NextResponse.json({ imported, skipped, errors, checkpoints })
 }
