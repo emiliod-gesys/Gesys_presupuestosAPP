@@ -208,10 +208,13 @@ export function SatImportPanel({
             <Input label="Hasta" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
           </div>
           <p className="text-xs text-amber-800 bg-amber-50/80 rounded-lg px-3 py-2 border border-amber-100">
-            En Vercel/AWS Lambda se usa Chromium empaquetado (@sparticuz/chromium). En tu PC hace falta Chrome instalado vía
-            Puppeteer (<code className="text-[11px]">npx puppeteer browsers install chrome</code> si falla). Opcional:{" "}
-            <code className="text-[11px]">SAT_PUPPETEER_HEADLESS=false</code> o{" "}
-            <code className="text-[11px]">SAT_PACKAGED_CHROMIUM=1</code> para forzar el binario empaquetado.
+            En Vercel/AWS Lambda se usa Chromium empaquetado (@sparticuz/chromium). En tu PC:{" "}
+            <code className="text-[11px]">npx puppeteer browsers install chrome</code> si falla el navegador. Opcional:{" "}
+            <code className="text-[11px]">SAT_PUPPETEER_HEADLESS=false</code>,{" "}
+            <code className="text-[11px]">SAT_PACKAGED_CHROMIUM=1</code>. La API FEL usa fechas{" "}
+            <strong>YYYY-MM-DD</strong> salvo que definas{" "}
+            <code className="text-[11px]">SAT_FEL_TRY_DDMM=1</code> en el servidor (casi siempre el SAT devuelve error con
+            dd/MM en la URL).
           </p>
         </CardContent>
       </Card>
@@ -269,24 +272,28 @@ export function SatImportPanel({
                 <span className="font-mono text-[11px]">{diagnostics.felConsultaUsuario}</span> (debe coincidir con el
                 contribuyente; el login del portal puede ser otro).
               </p>
-              {diagnostics.felDateFormatUsed && (
-                <p className="text-gray-600">
-                  Formato de fechas en la URL de la API:{" "}
-                  <span className="font-mono">{diagnostics.felDateFormatUsed}</span>
-                  {diagnostics.felDateFormatUsed === "ddmmyyyy" && " (dd/MM/yyyy)"}
-                  {diagnostics.felDateFormatUsed === "iso" && " (YYYY-MM-DD)"}
-                </p>
-              )}
+              <p className="text-gray-600">
+                Formato de fechas en la URL de la API:{" "}
+                <span className="font-mono">{diagnostics.felDateFormatUsed ?? "iso"}</span>
+                {(diagnostics.felDateFormatUsed ?? "iso") === "ddmmyyyy" && " (dd/MM/yyyy)"}
+                {(diagnostics.felDateFormatUsed ?? "iso") === "iso" && " (YYYY-MM-DD)"}
+              </p>
               <ul className="list-none space-y-1.5 font-mono text-[11px]">
                 <li>
                   Emitidos (E): crudos {diagnostics.emitidos.rawListLength} → importables{" "}
                   {diagnostics.emitidos.normalizedCount}
+                  {diagnostics.emitidos.satTotalRegistros != null &&
+                    diagnostics.emitidos.satTotalRegistros > diagnostics.emitidos.rawListLength &&
+                    ` · total SAT ${diagnostics.emitidos.satTotalRegistros}`}
                   {diagnostics.emitidos.codigo != null && ` · código ${diagnostics.emitidos.codigo}`}
                   {diagnostics.emitidos.mensaje && ` · ${diagnostics.emitidos.mensaje}`}
                 </li>
                 <li>
                   Recibidos / compras (R): crudos {diagnostics.recibidos.rawListLength} → importables{" "}
                   {diagnostics.recibidos.normalizedCount}
+                  {diagnostics.recibidos.satTotalRegistros != null &&
+                    diagnostics.recibidos.satTotalRegistros > diagnostics.recibidos.rawListLength &&
+                    ` · total SAT ${diagnostics.recibidos.satTotalRegistros}`}
                   {diagnostics.recibidos.codigo != null && ` · código ${diagnostics.recibidos.codigo}`}
                   {diagnostics.recibidos.mensaje && ` · ${diagnostics.recibidos.mensaje}`}
                 </li>

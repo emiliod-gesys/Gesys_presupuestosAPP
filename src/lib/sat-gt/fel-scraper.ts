@@ -10,6 +10,7 @@ import {
   describeFelResponseShape,
   extractConsultaDteList,
   felMessageFromResponse,
+  getConsultaDtePagedSlice,
   isFelCodigoClientError,
   normalizeSatDteRecord,
 } from "./fel-rows"
@@ -228,7 +229,11 @@ export async function runSatFelExtraction(opts: {
   let salesList = extractConsultaDteList(preSales)
   let purchaseList = extractConsultaDteList(prePurchases)
 
-  if (salesList.length === 0 && purchaseList.length === 0) {
+  if (
+    process.env.SAT_FEL_TRY_DDMM === "1" &&
+    salesList.length === 0 &&
+    purchaseList.length === 0
+  ) {
     const preSalesDd = await fetchFelConsultaDteMergedPages(
       token,
       cookieHeader,
@@ -263,11 +268,7 @@ export async function runSatFelExtraction(opts: {
       salesList = salesDd
       purchaseList = purchaseDd
       warnings.push(
-        "La API devolvió DTE usando fechas dd/MM/yyyy en la URL (reintento automático). El formato ISO no devolvía filas en esta consulta."
-      )
-    } else {
-      warnings.push(
-        "Reintento con fechas dd/MM/yyyy en la URL no aplicado (el SAT respondió error o sin datos). Se mantiene el resultado en formato ISO (YYYY-MM-DD), con paginación ya aplicada."
+        "SAT_FEL_TRY_DDMM=1: se usaron fechas dd/MM/yyyy en la URL y hubo filas. Si no lo necesitas, quita la variable de entorno."
       )
     }
   }
@@ -343,6 +344,8 @@ export async function runSatFelExtraction(opts: {
   }
   const hintE = describeFelResponseShape(preSales)
   const hintR = describeFelResponseShape(prePurchases)
+  const sliceDiagE = getConsultaDtePagedSlice(preSales)
+  const sliceDiagR = getConsultaDtePagedSlice(prePurchases)
 
   if (salesList.length === 0 && purchaseList.length === 0) {
     if (msgE.mensaje || msgR.mensaje) {
@@ -370,12 +373,14 @@ export async function runSatFelExtraction(opts: {
       normalizedCount: normE,
       codigo: msgE.codigo,
       mensaje: msgE.mensaje,
+      satTotalRegistros: sliceDiagE.totalReported > 0 ? sliceDiagE.totalReported : null,
     },
     recibidos: {
       rawListLength: purchaseList.length,
       normalizedCount: normR,
       codigo: msgR.codigo,
       mensaje: msgR.mensaje,
+      satTotalRegistros: sliceDiagR.totalReported > 0 ? sliceDiagR.totalReported : null,
     },
   }
 

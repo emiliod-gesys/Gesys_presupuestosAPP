@@ -315,7 +315,6 @@ export function extractConsultaDteList(responseData: unknown): Record<string, un
   return deepFindBestDteRecordArray(root)
 }
 
-/** Para diagnóstico en UI (solo estructura, sin datos sensibles). */
 /** Extrae `detalle.data` y totales típicos de la paginación del SAT (`total`, `totalPagina`). */
 export function getConsultaDtePagedSlice(responseData: unknown): {
   rows: Record<string, unknown>[]
@@ -388,6 +387,9 @@ export function describeFelResponseShape(responseData: unknown): {
     if (isRecord(v)) for (const x of Object.values(v)) walk(x, d + 1)
   }
   walk(root, 0)
+  if (isRecord(det) && Array.isArray(det.data)) {
+    maxLen = Math.max(maxLen, det.data.length)
+  }
   return { rootKeys, detalleKind, detalleKeys, maxArrayLengthSeen: maxLen }
 }
 

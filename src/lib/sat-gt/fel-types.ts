@@ -27,6 +27,8 @@ export interface SatFelConsultaDiag {
   normalizedCount: number
   codigo: string | null
   mensaje: string | null
+  /** `detalle.total` del SAT (puede ser mayor que filas en `data` si hay paginación). */
+  satTotalRegistros?: number | null
 }
 
 /** Pistas de forma del JSON (sin datos sensibles). */
