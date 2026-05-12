@@ -43,7 +43,8 @@ export function SatImportPanel({
   const { toast } = useToast()
   const router = useRouter()
   const range0 = useMemo(() => defaultSatDateRange(), [])
-  const utcTodayIso = useMemo(() => new Date().toISOString().slice(0, 10), [])
+  /** Hoy en UTC por comparación de cadenas YYYY-MM-DD; se recalcula en cada render (evita quedar «congelado» tras medianoche). */
+  const utcTodayIso = new Date().toISOString().slice(0, 10)
   const [dateFrom, setDateFrom] = useState(range0.from)
   const [dateTo, setDateTo] = useState(range0.to)
   const [rows, setRows] = useState<SatDteListRow[]>([])
@@ -104,9 +105,12 @@ export function SatImportPanel({
       setRowCategory(cat)
       setRowTxType(tx)
       if (list.length === 0) {
+        const hastaFutura = dateTo.trim() > utcTodayIso
         toast(
           "error",
-          "No hay facturas listadas para importar. Revisa el diagnóstico abajo (usuario= en la API, rango de fechas y mensaje del SAT)."
+          hastaFutura
+            ? `No hay facturas en la respuesta. «Hasta» (${dateTo.trim()}) es posterior a hoy UTC (${utcTodayIso}); el SAT suele devolver total 0. Pon la fecha final en hoy o en el último día con documentos.`
+            : "No hay facturas listadas para importar. Revisa el diagnóstico abajo (usuario= en la API, rango de fechas y mensaje del SAT)."
         )
       } else {
         toast("success", `${list.length} DTE en el período`)
