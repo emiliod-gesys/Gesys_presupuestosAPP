@@ -30,6 +30,12 @@ export type FelConsultaDteOpts = {
    * `SAT_FEL_OMIT_NIT_RECEPTOR=1`: siempre vacío. Sin NIT aquí y `SAT_FEL_NIT_RECEPTOR_QUERY=1`: se usa `usuario=`.
    */
   nitReceptorQueryValue?: string
+  /**
+   * Si true, en R se envía `nitIdReceptor` aunque coincida con `usuario=` (reintento / despliegues del SAT que lo exigen).
+   */
+  forceNitIdReceptorWhenSameUsuario?: boolean
+  /** Si true, esta petición usa `establecimiento=0` en la URL de consulta-dte (no el vacío por defecto). */
+  consultaEstablecimientoForceZero?: boolean
 }
 
 function felIdsEquivalentForReceptor(a: string, b: string): boolean {
@@ -38,17 +44,26 @@ function felIdsEquivalentForReceptor(a: string, b: string): boolean {
   return da.length > 0 && db.length > 0 && da === db
 }
 
+export function felIdsEquivalentUsuarioNit(usuario: string, nit: string): boolean {
+  return felIdsEquivalentForReceptor(usuario, nit)
+}
+
 /** Valor de `nitIdReceptor` en consulta-dte / zip-xml para operación R. */
 export function felNitIdReceptorQueryParam(
   operationType: "E" | "R",
   usuario: string,
-  nitReceptorQueryValue?: string
+  nitReceptorQueryValue?: string,
+  forceWhenSameUsuario?: boolean
 ): string {
   if (operationType !== "R" || process.env.SAT_FEL_OMIT_NIT_RECEPTOR === "1") return ""
   const explicit = nitReceptorQueryValue?.trim() ?? ""
   const u = usuario.trim()
   if (explicit !== "") {
-    if (!process.env.SAT_FEL_FORCE_NIT_RECEPTOR && felIdsEquivalentForReceptor(explicit, u)) {
+    if (
+      !forceWhenSameUsuario &&
+      !process.env.SAT_FEL_FORCE_NIT_RECEPTOR &&
+      felIdsEquivalentForReceptor(explicit, u)
+    ) {
       return ""
     }
     return encodeURIComponent(explicit)
@@ -84,9 +99,12 @@ const FELCONS_BROWSER_HEADERS = {
   "User-Agent":
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
   Referer: "https://felcons.c.sat.gob.gt/dte-agencia-virtual/dte-consulta",
+  Origin: "https://felcons.c.sat.gob.gt",
+  Accept: "application/json, text/plain, */*",
 } as const
 
-function consultaDteEstablecimientoQuery(): string {
+function consultaDteEstablecimientoQuery(forceZero?: boolean): string {
+  if (forceZero) return encodeURIComponent("0")
   const v = process.env.SAT_FEL_ESTABLECIMIENTO_CONSULTA?.trim()
   if (v !== undefined && v !== "") return encodeURIComponent(v)
   if (process.env.SAT_FEL_CONSULTA_ESTABLECIMIENTO_ZERO === "1") return encodeURIComponent("0")
@@ -113,8 +131,13 @@ export async function fetchFelConsultaDte(
   const fmt = opts?.dateFormat ?? "iso"
   const s = fmt === "ddmmyyyy" ? isoDateToDdMmYyyy(startDate) : startDate
   const e = fmt === "ddmmyyyy" ? isoDateToDdMmYyyy(endDate) : endDate
-  const nitReceptor = felNitIdReceptorQueryParam(operationType, user, opts?.nitReceptorQueryValue)
-  const est = consultaDteEstablecimientoQuery()
+  const nitReceptor = felNitIdReceptorQueryParam(
+    operationType,
+    user,
+    opts?.nitReceptorQueryValue,
+    opts?.forceNitIdReceptorWhenSameUsuario === true
+  )
+  const est = consultaDteEstablecimientoQuery(opts?.consultaEstablecimientoForceZero === true)
   let url =
     `https://felcons.c.sat.gob.gt/dte-agencia-virtual/api/consulta-dte?usuario=${encodeURIComponent(user)}` +
     `&tipoOperacion=${operationType}&establecimiento=${est}&tipoDte=&noAutorizacion=&nitIdReceptor=${nitReceptor}&estadoDte=&serie=&numero=&moneda=&montoTotalRangoIni=&montoTotalRangoFinal=&impuesto=&nitCertificador=&resultado=&fechaEmisionIni=${encodeURIComponent(s)}&fechaEmisionFinal=${encodeURIComponent(e)}`
@@ -126,7 +149,7 @@ export async function fetchFelConsultaDte(
   }
 
   try {
-    /** Cabeceras mínimas como `reference/moore-rpa-main/src/api.ts` (sin Accept). */
+    /** Cabeceras tipo navegador en felcons (Referer, Origin, Accept). */
     const response = await axios.get(url, {
       headers: {
         Authorization: token.trim(),
@@ -159,6 +182,8 @@ export type FelConsultaDteMergedOpts = {
   /** Trazas internas (fusión de páginas); no incluir datos sensibles en `detail`. */
   onCheckpoint?: (stage: string, detail?: string) => void
   nitReceptorQueryValue?: string
+  forceNitIdReceptorWhenSameUsuario?: boolean
+  consultaEstablecimientoForceZero?: boolean
 }
 
 export async function fetchFelConsultaDteMergedPages(
@@ -179,6 +204,12 @@ export async function fetchFelConsultaDteMergedPages(
     return fetchFelConsultaDte(token, cookieHeader, user, startDate, endDate, operationType, {
       dateFormat: fmt,
       ...(nitRv ? { nitReceptorQueryValue: nitRv } : {}),
+      ...(opts?.forceNitIdReceptorWhenSameUsuario === true
+        ? { forceNitIdReceptorWhenSameUsuario: true }
+        : {}),
+      ...(opts?.consultaEstablecimientoForceZero === true
+        ? { consultaEstablecimientoForceZero: true }
+        : {}),
       ...extra,
     })
   }
@@ -312,7 +343,12 @@ export async function fetchFelZipXmlLines(
   opts?.onCheckpoint?.("start", `body_rows=${bodyRows.length}`)
   const s = fmt === "ddmmyyyy" ? isoDateToDdMmYyyy(startDate) : startDate
   const e = fmt === "ddmmyyyy" ? isoDateToDdMmYyyy(endDate) : endDate
-  const nitReceptorZip = felNitIdReceptorQueryParam(operationType, user, opts?.nitReceptorQueryValue)
+  const nitReceptorZip = felNitIdReceptorQueryParam(
+    operationType,
+    user,
+    opts?.nitReceptorQueryValue,
+    opts?.forceNitIdReceptorWhenSameUsuario === true
+  )
   const url =
     `https://felcons.c.sat.gob.gt/dte-agencia-virtual/api/consulta-dte/zip-xml?usuario=${encodeURIComponent(user)}` +
     `&tipoOperacion=${operationType}&establecimiento=0&tipoDte=TDS&noAutorizacion=&nitIdReceptor=${nitReceptorZip}&estadoDte=TDS&serie=&numero=&moneda=TDS&montoTotalRangoIni=&montoTotalRangoFinal=&impuesto=&nitCertificador=&resultado=&fechaEmisionIni=${encodeURIComponent(s)}&fechaEmisionFinal=${encodeURIComponent(e)}`

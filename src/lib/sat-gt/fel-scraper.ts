@@ -1,6 +1,7 @@
 import type { Browser, Page } from "puppeteer-core"
 import {
   felConsultaEstablecimientoExplain,
+  felIdsEquivalentUsuarioNit,
   felNitIdReceptorQueryExplain,
   fetchFelConsultaDteMergedPages,
   fetchFelZipXmlLines,
@@ -295,6 +296,94 @@ export async function runSatFelExtraction(opts: {
     `emitidos_raw=${salesList.length} recibidos_raw=${purchaseList.length}`
   )
 
+  let forceNitSameForRZip = false
+  const consultaReintentos: string[] = []
+
+  if (
+    salesList.length === 0 &&
+    purchaseList.length === 0 &&
+    process.env.SAT_FEL_EMPTY_RETRY_ESTABLECIMIENTO_ZERO === "1"
+  ) {
+    cp("sat.retry_empty_establecimiento_zero")
+    const preSalesZ = await fetchFelConsultaDteMergedPages(
+      token,
+      cookieHeader,
+      apiUsuario,
+      qFrom,
+      qTo,
+      "E",
+      {
+        dateFormat: "iso",
+        onCheckpoint: mergeCp("E"),
+        nitReceptorQueryValue: nitForReceptor,
+        consultaEstablecimientoForceZero: true,
+      }
+    )
+    const prePurchasesZ = await fetchFelConsultaDteMergedPages(
+      token,
+      cookieHeader,
+      apiUsuario,
+      qFrom,
+      qTo,
+      "R",
+      {
+        dateFormat: "iso",
+        onCheckpoint: mergeCp("R"),
+        nitReceptorQueryValue: nitForReceptor,
+        consultaEstablecimientoForceZero: true,
+      }
+    )
+    const sZ = extractConsultaDteList(preSalesZ)
+    const pZ = extractConsultaDteList(prePurchasesZ)
+    if (sZ.length + pZ.length > 0) {
+      preSales = preSalesZ
+      prePurchases = prePurchasesZ
+      salesList = sZ
+      purchaseList = pZ
+      consultaReintentos.push("establecimiento_zero")
+      warnings.push(
+        "SAT_FEL_EMPTY_RETRY_ESTABLECIMIENTO_ZERO=1: segunda pasada de consulta-dte con establecimiento=0 devolvió filas. Comprueba en el portal FEL y quita la variable si no la necesitas."
+      )
+    } else {
+      cp("sat.retry_empty_establecimiento_zero_skip", "sin_filas")
+    }
+  }
+
+  if (
+    purchaseList.length === 0 &&
+    process.env.SAT_FEL_EMPTY_RETRY_R_DUPLICATE_NIT === "1" &&
+    nitForReceptor &&
+    felIdsEquivalentUsuarioNit(apiUsuario, nitForReceptor)
+  ) {
+    cp("sat.retry_empty_r_duplicate_nit")
+    const prePurchasesDup = await fetchFelConsultaDteMergedPages(
+      token,
+      cookieHeader,
+      apiUsuario,
+      qFrom,
+      qTo,
+      "R",
+      {
+        dateFormat: "iso",
+        onCheckpoint: mergeCp("R"),
+        nitReceptorQueryValue: nitForReceptor,
+        forceNitIdReceptorWhenSameUsuario: true,
+      }
+    )
+    const pDup = extractConsultaDteList(prePurchasesDup)
+    if (pDup.length > 0) {
+      prePurchases = prePurchasesDup
+      purchaseList = pDup
+      consultaReintentos.push("r_nit_dup")
+      forceNitSameForRZip = true
+      warnings.push(
+        "SAT_FEL_EMPTY_RETRY_R_DUPLICATE_NIT=1: segunda consulta R con nitIdReceptor igual al login devolvió filas. El SAT puede comportarse distinto según contribuyente."
+      )
+    } else {
+      cp("sat.retry_empty_r_duplicate_nit_skip", "sin_filas")
+    }
+  }
+
   if (
     process.env.SAT_FEL_TRY_DDMM === "1" &&
     salesList.length === 0 &&
@@ -383,6 +472,7 @@ export async function runSatFelExtraction(opts: {
         dateFormat: dateFormatUsed,
         onCheckpoint: (stage, detail) => cp(`sat.zip_recibidos.${stage}`, detail),
         nitReceptorQueryValue: nitForReceptor,
+        forceNitIdReceptorWhenSameUsuario: forceNitSameForRZip,
       }
     )
     cp("sat.zip_xml_recibidos_done", `xml_docs=${xmlPurchases.length}`)
@@ -487,6 +577,8 @@ export async function runSatFelExtraction(opts: {
     felQueryEcho: {
       nitIdReceptorRecibidos: felNitIdReceptorQueryExplain(apiUsuario, opts.profileNit),
       establecimientoConsulta: felConsultaEstablecimientoExplain(),
+      ...(consultaReintentos.length > 0 ? { reintentosConsulta: [...consultaReintentos] } : {}),
+      ...(forceNitSameForRZip ? { recibidosNitIdReceptorForzado: true } : {}),
     },
     responseHints: { emitidos: hintE, recibidos: hintR },
     checkpoints,

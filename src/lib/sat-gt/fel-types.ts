@@ -83,6 +83,10 @@ export interface SatFelRunDiagnostics {
     nitIdReceptorRecibidos: { sent: boolean; reasonKey: string }
     /** `vacio` (moore por defecto), `0` (SAT_FEL_CONSULTA_ESTABLECIMIENTO_ZERO=1), `custom` (SAT_FEL_ESTABLECIMIENTO_CONSULTA). */
     establecimientoConsulta: string
+    /** Reintentos de consulta-dte por variables de entorno (p. ej. `establecimiento_zero`). */
+    reintentosConsulta?: string[]
+    /** `true` si compras (R) se consultaron enviando `nitIdReceptor` igual a `usuario=` (reintento SAT_FEL_EMPTY_RETRY_R_DUPLICATE_NIT). */
+    recibidosNitIdReceptorForzado?: boolean
   }
   responseHints?: {
     emitidos: SatFelResponseShapeHint

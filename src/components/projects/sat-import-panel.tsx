@@ -437,8 +437,24 @@ export function SatImportPanel({
                   <span className="font-mono">R</span> / <span className="font-mono">nitIdReceptor</span>{" "}
                   {diagnostics.felQueryEcho.nitIdReceptorRecibidos.sent ? "enviado" : "omitido"} (
                   <span className="font-mono">{diagnostics.felQueryEcho.nitIdReceptorRecibidos.reasonKey}</span>)
+                  {diagnostics.felQueryEcho.recibidosNitIdReceptorForzado ? (
+                    <>
+                      {" "}
+                      · en <span className="font-mono">zip-xml</span> / listado R se usó{" "}
+                      <span className="font-mono">nitIdReceptor</span> forzado (reintento con NIT = login).
+                    </>
+                  ) : null}
                 </p>
               )}
+              {diagnostics.felQueryEcho?.reintentosConsulta && diagnostics.felQueryEcho.reintentosConsulta.length > 0 ? (
+                <p className="text-xs text-indigo-900 bg-indigo-50/90 rounded-md border border-indigo-100 px-2 py-1.5">
+                  Reintentos de consulta-dte activados por entorno:{" "}
+                  <span className="font-mono">{diagnostics.felQueryEcho.reintentosConsulta.join(", ")}</span>
+                  . Variables:{" "}
+                  <code className="text-[10px]">SAT_FEL_EMPTY_RETRY_ESTABLECIMIENTO_ZERO=1</code>,{" "}
+                  <code className="text-[10px]">SAT_FEL_EMPTY_RETRY_R_DUPLICATE_NIT=1</code>.
+                </p>
+              ) : null}
               <ul className="list-none space-y-1.5 font-mono text-[11px]">
                 <li>
                   Emitidos (E): crudos {diagnostics.emitidos.rawListLength} → importables{" "}
@@ -524,8 +540,17 @@ export function SatImportPanel({
                     u otro identificador en el XML puede no coincidir con el NIT que consultas).
                   </li>
                   <li>
-                    Asegúrate de que «Hasta» no sea <strong>posterior a hoy</strong> (UTC del servidor); si lo es, el SAT
-                    suele devolver total 0.
+                    En el servidor la consulta <strong>acota</strong> «hasta» al día UTC de hoy si es futura (salvo{" "}
+                    <code className="rounded bg-white/80 px-1 text-[10px]">SAT_FEL_DISABLE_DATE_CLAMP=1</code>). Mira en
+                    el diagnóstico el rango <strong>efectivo</strong> enviado al SAT.
+                  </li>
+                  <li>
+                    Si la primera respuesta es total 0 pero en FEL ves documentos, prueba en el despliegue (p. ej. Vercel){" "}
+                    <code className="rounded bg-white/80 px-1 text-[10px]">SAT_FEL_EMPTY_RETRY_ESTABLECIMIENTO_ZERO=1</code>{" "}
+                    (segunda pasada con <span className="font-mono">establecimiento=0</span>) y/o{" "}
+                    <code className="rounded bg-white/80 px-1 text-[10px]">SAT_FEL_EMPTY_RETRY_R_DUPLICATE_NIT=1</code>{" "}
+                    (segunda consulta R con <span className="font-mono">nitIdReceptor</span> = login aunque sea el mismo
+                    NIT).
                   </li>
                 </ol>
               </div>
