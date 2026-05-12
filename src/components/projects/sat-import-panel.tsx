@@ -426,6 +426,29 @@ export function SatImportPanel({
                   </p>
                 </div>
               )}
+              <div className="rounded-md border border-indigo-100 bg-indigo-50/60 px-3 py-2 text-gray-800">
+                <p className="font-medium text-indigo-950">Si en el portal FEL ves compras (recibidas) y aquí no</p>
+                <ol className="mt-1.5 list-decimal list-inside space-y-1 text-[11px] text-gray-700">
+                  <li>
+                    En el servidor (p. ej. Vercel), define{" "}
+                    <code className="rounded bg-white/80 px-1 text-[10px]">SAT_FEL_NIT_RECEPTOR_QUERY=1</code> y
+                    redespliega: la API enviará tu NIT del perfil en{" "}
+                    <span className="font-mono">nitIdReceptor</span> para la operación R (compras).
+                  </li>
+                  <li>
+                    Usa el <strong>mismo usuario</strong> con el que entras al portal y el <strong>mismo rango de fechas</strong>{" "}
+                    que en «Consultar DTE» del SAT.
+                  </li>
+                  <li>
+                    Comprueba que el NIT del perfil sea el <strong>receptor</strong> de esas facturas (CUI/NIT extranjero
+                    u otro identificador en el XML puede no coincidir con el NIT que consultas).
+                  </li>
+                  <li>
+                    Asegúrate de que «Hasta» no sea <strong>posterior a hoy</strong> (UTC del servidor); si lo es, el SAT
+                    suele devolver total 0.
+                  </li>
+                </ol>
+              </div>
               <p className="text-gray-500">
                 Si «crudos» es mayor que «importables», el JSON del SAT cambió de forma; si ambos son 0, no hay datos en
                 ese rango o el <span className="font-mono">usuario=</span> de la consulta no corresponde al contribuyente
