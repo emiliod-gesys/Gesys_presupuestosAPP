@@ -1,5 +1,7 @@
 import type { Browser, Page } from "puppeteer-core"
 import {
+  felConsultaEstablecimientoExplain,
+  felNitIdReceptorQueryExplain,
   fetchFelConsultaDteMergedPages,
   fetchFelZipXmlLines,
   type FelConsultaDateFormat,
@@ -454,6 +456,10 @@ export async function runSatFelExtraction(opts: {
       dateTo: opts.dateTo,
       utcToday,
       dateToAfterUtcToday,
+    },
+    felQueryEcho: {
+      nitIdReceptorRecibidos: felNitIdReceptorQueryExplain(apiUsuario, opts.profileNit),
+      establecimientoConsulta: felConsultaEstablecimientoExplain(),
     },
     responseHints: { emitidos: hintE, recibidos: hintR },
     checkpoints,

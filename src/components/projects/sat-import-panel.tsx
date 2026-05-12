@@ -369,6 +369,16 @@ export function SatImportPanel({
                   ) : null}
                 </p>
               )}
+              {diagnostics.felQueryEcho && (
+                <p className="text-gray-600">
+                  Parámetros consulta-dte (eco): <span className="font-mono">establecimiento=</span>{" "}
+                  <span className="font-mono">{diagnostics.felQueryEcho.establecimientoConsulta}</span>
+                  {" · "}
+                  <span className="font-mono">R</span> / <span className="font-mono">nitIdReceptor</span>{" "}
+                  {diagnostics.felQueryEcho.nitIdReceptorRecibidos.sent ? "enviado" : "omitido"} (
+                  <span className="font-mono">{diagnostics.felQueryEcho.nitIdReceptorRecibidos.reasonKey}</span>)
+                </p>
+              )}
               <ul className="list-none space-y-1.5 font-mono text-[11px]">
                 <li>
                   Emitidos (E): crudos {diagnostics.emitidos.rawListLength} → importables{" "}

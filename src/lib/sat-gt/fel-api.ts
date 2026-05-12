@@ -59,6 +59,48 @@ export function felNitIdReceptorQueryParam(
   return ""
 }
 
+/** Para diagnóstico UI (sin exponer el NIT completo). */
+export function felNitIdReceptorQueryExplain(
+  usuario: string,
+  nitReceptorQueryValue?: string | null
+): { sent: boolean; reasonKey: string } {
+  if (process.env.SAT_FEL_OMIT_NIT_RECEPTOR === "1") return { sent: false, reasonKey: "omit_env" }
+  const explicit = nitReceptorQueryValue?.trim() ?? ""
+  const u = usuario.trim()
+  if (explicit !== "") {
+    if (!process.env.SAT_FEL_FORCE_NIT_RECEPTOR && felIdsEquivalentForReceptor(explicit, u)) {
+      return { sent: false, reasonKey: "omit_same_as_usuario" }
+    }
+    if (process.env.SAT_FEL_FORCE_NIT_RECEPTOR && felIdsEquivalentForReceptor(explicit, u)) {
+      return { sent: true, reasonKey: "forced_same" }
+    }
+    return { sent: true, reasonKey: "perfil_distinto" }
+  }
+  if (process.env.SAT_FEL_NIT_RECEPTOR_QUERY === "1" && u !== "") return { sent: true, reasonKey: "legacy_usuario" }
+  return { sent: false, reasonKey: "omit_sin_nit_perfil" }
+}
+
+const FELCONS_BROWSER_HEADERS = {
+  "User-Agent":
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+  Referer: "https://felcons.c.sat.gob.gt/dte-agencia-virtual/dte-consulta",
+} as const
+
+function consultaDteEstablecimientoQuery(): string {
+  const v = process.env.SAT_FEL_ESTABLECIMIENTO_CONSULTA?.trim()
+  if (v !== undefined && v !== "") return encodeURIComponent(v)
+  if (process.env.SAT_FEL_CONSULTA_ESTABLECIMIENTO_ZERO === "1") return encodeURIComponent("0")
+  /** Vacío como `reference/moore-rpa-main` GET consulta-dte. */
+  return ""
+}
+
+export function felConsultaEstablecimientoExplain(): string {
+  const v = process.env.SAT_FEL_ESTABLECIMIENTO_CONSULTA?.trim()
+  if (v !== undefined && v !== "") return "custom"
+  if (process.env.SAT_FEL_CONSULTA_ESTABLECIMIENTO_ZERO === "1") return "0"
+  return "vacio"
+}
+
 export async function fetchFelConsultaDte(
   token: string,
   cookieHeader: string,
@@ -72,9 +114,10 @@ export async function fetchFelConsultaDte(
   const s = fmt === "ddmmyyyy" ? isoDateToDdMmYyyy(startDate) : startDate
   const e = fmt === "ddmmyyyy" ? isoDateToDdMmYyyy(endDate) : endDate
   const nitReceptor = felNitIdReceptorQueryParam(operationType, user, opts?.nitReceptorQueryValue)
+  const est = consultaDteEstablecimientoQuery()
   let url =
     `https://felcons.c.sat.gob.gt/dte-agencia-virtual/api/consulta-dte?usuario=${encodeURIComponent(user)}` +
-    `&tipoOperacion=${operationType}&establecimiento=&tipoDte=&noAutorizacion=&nitIdReceptor=${nitReceptor}&estadoDte=&serie=&numero=&moneda=&montoTotalRangoIni=&montoTotalRangoFinal=&impuesto=&nitCertificador=&resultado=&fechaEmisionIni=${encodeURIComponent(s)}&fechaEmisionFinal=${encodeURIComponent(e)}`
+    `&tipoOperacion=${operationType}&establecimiento=${est}&tipoDte=&noAutorizacion=&nitIdReceptor=${nitReceptor}&estadoDte=&serie=&numero=&moneda=&montoTotalRangoIni=&montoTotalRangoFinal=&impuesto=&nitCertificador=&resultado=&fechaEmisionIni=${encodeURIComponent(s)}&fechaEmisionFinal=${encodeURIComponent(e)}`
   if (opts?.pagina != null && opts.pagina > 0) {
     url += `&pagina=${encodeURIComponent(String(opts.pagina))}`
   }
@@ -88,6 +131,7 @@ export async function fetchFelConsultaDte(
       headers: {
         Authorization: token.trim(),
         Cookie: cookieHeader,
+        ...FELCONS_BROWSER_HEADERS,
       },
     })
     return response.data
@@ -278,6 +322,7 @@ export async function fetchFelZipXmlLines(
       Authorization: token.trim(),
       Cookie: cookieHeader,
       "Content-Type": "application/json",
+      ...FELCONS_BROWSER_HEADERS,
     },
     responseType: "arraybuffer",
   })

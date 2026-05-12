@@ -69,6 +69,12 @@ export interface SatFelRunDiagnostics {
     utcToday: string
     dateToAfterUtcToday: boolean
   }
+  /** Eco de parámetros de consulta-dte (R y establecimiento) para comparar con el portal / moore-rpa. */
+  felQueryEcho?: {
+    nitIdReceptorRecibidos: { sent: boolean; reasonKey: string }
+    /** `vacio` (moore por defecto), `0` (SAT_FEL_CONSULTA_ESTABLECIMIENTO_ZERO=1), `custom` (SAT_FEL_ESTABLECIMIENTO_CONSULTA). */
+    establecimientoConsulta: string
+  }
   responseHints?: {
     emitidos: SatFelResponseShapeHint
     recibidos: SatFelResponseShapeHint
