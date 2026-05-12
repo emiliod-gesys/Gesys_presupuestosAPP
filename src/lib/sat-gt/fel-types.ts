@@ -56,8 +56,10 @@ export interface SatFelResponseShapeHint {
 export interface SatFelRunDiagnostics {
   emitidos: SatFelConsultaDiag
   recibidos: SatFelConsultaDiag
-  /** Usuario enviado en el query `usuario=` de la API FEL (suele ser el NIT). */
+  /** Valor real del parámetro `usuario=` en consulta-dte / zip-xml (reference/moore-rpa: mismo usuario con el que inicias sesión en farm3). */
   felConsultaUsuario: string
+  /** NIT del perfil (solo referencia; puede no coincidir con `usuario=` en la URL). */
+  felNitPerfil?: string | null
   /** Formato de fecha usado en la URL de consulta-dte (último intento que devolvió datos o el reintento). */
   felDateFormatUsed?: "iso" | "ddmmyyyy"
   /** Rango enviado al SAT y si «hasta» queda en el futuro respecto al día UTC del servidor (suele dar total 0). */

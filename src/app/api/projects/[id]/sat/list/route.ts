@@ -94,6 +94,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const { rows, warnings, diagnostics } = await runSatFelExtraction({
       portalLogin: login,
       felConsultaUsuario: nitNorm || login,
+      profileNit: nitNorm || null,
       portalPassword: password,
       dateFrom,
       dateTo,

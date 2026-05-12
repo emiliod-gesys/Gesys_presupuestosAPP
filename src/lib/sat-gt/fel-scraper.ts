@@ -17,6 +17,8 @@ import {
 import type { SatDteListRow, SatFelCheckpoint, SatFelRunDiagnostics } from "./fel-types"
 
 /**
+ * Flujo felcons alineado con `reference/moore-rpa-main` (login farm3 → `usuario=` en consulta-dte).
+ *
  * Entornos cloud (Vercel, Lambda, etc.) suelen usar HOME tipo /home/sbx_user… sin caché de Puppeteer.
  * No confiar solo en VERCEL==="1" (a veces falta o difiere); @sparticuz/chromium + puppeteer-core evitan el error
  * "Could not find Chrome".
@@ -134,8 +136,13 @@ function attachLineSummaries(rows: Record<string, unknown>[], xmlRows: FelXmlCon
 export async function runSatFelExtraction(opts: {
   /** Usuario con el que se abre farm3 (correo o NIT). */
   portalLogin: string
-  /** Valor del query `usuario=` en consulta-dte / zip-xml: suele ser el NIT aunque el login sea correo. */
+  /**
+   * Reserva para `usuario=` si no hay `portalLogin` (caso raro).
+   * Por defecto usamos **portalLogin** en la API, igual que `reference/moore-rpa-main` (`username` en fetchDataFromAPI).
+   */
   felConsultaUsuario: string
+  /** NIT normalizado del perfil (solo diagnóstico; no sustituye al login en `usuario=`). */
+  profileNit?: string | null
   portalPassword: string
   dateFrom: string
   dateTo: string
@@ -151,10 +158,11 @@ export async function runSatFelExtraction(opts: {
 
   cp("sat.run_start", `range=${opts.dateFrom}..${opts.dateTo}`)
   const username = opts.portalLogin.trim()
-  const apiUsuario = opts.felConsultaUsuario.trim() || username
+  /** Igual que moore-rpa `routes.ts` → `fetchDataFromAPI(..., username, ...)`: `usuario=` = login del portal. */
+  const apiUsuario = username || opts.felConsultaUsuario.trim()
   const password = opts.portalPassword
   if (!username || !password) throw new Error("Faltan usuario o contraseña del portal SAT.")
-  if (!apiUsuario) throw new Error("Falta NIT o usuario para consultar DTE en la API del SAT.")
+  if (!apiUsuario) throw new Error("Falta usuario para consultar DTE en la API del SAT.")
 
   const headless = process.env.SAT_PUPPETEER_HEADLESS?.toLowerCase() !== "false"
   cp("sat.browser_launch", `headless=${headless} chromium=${shouldUsePackagedChromium() ? "packaged" : "local"}`)
@@ -228,6 +236,8 @@ export async function runSatFelExtraction(opts: {
       cp(`sat.merge_${op === "E" ? "emitidos" : "recibidos"}.${stage}`, detail)
     }
 
+  const nitForReceptor = opts.profileNit?.trim() || undefined
+
   let dateFormatUsed: FelConsultaDateFormat = "iso"
   cp("sat.api_consulta_emitidos_start")
   const preSalesIso = await fetchFelConsultaDteMergedPages(
@@ -237,7 +247,7 @@ export async function runSatFelExtraction(opts: {
     opts.dateFrom,
     opts.dateTo,
     "E",
-    { dateFormat: "iso", onCheckpoint: mergeCp("E") }
+    { dateFormat: "iso", onCheckpoint: mergeCp("E"), nitReceptorQueryValue: nitForReceptor }
   )
   cp("sat.api_consulta_recibidos_start")
   const prePurchasesIso = await fetchFelConsultaDteMergedPages(
@@ -247,7 +257,7 @@ export async function runSatFelExtraction(opts: {
     opts.dateFrom,
     opts.dateTo,
     "R",
-    { dateFormat: "iso", onCheckpoint: mergeCp("R") }
+    { dateFormat: "iso", onCheckpoint: mergeCp("R"), nitReceptorQueryValue: nitForReceptor }
   )
 
   let preSales = preSalesIso
@@ -272,7 +282,7 @@ export async function runSatFelExtraction(opts: {
       opts.dateFrom,
       opts.dateTo,
       "E",
-      { dateFormat: "ddmmyyyy", onCheckpoint: mergeCp("E") }
+      { dateFormat: "ddmmyyyy", onCheckpoint: mergeCp("E"), nitReceptorQueryValue: nitForReceptor }
     )
     const prePurchasesDd = await fetchFelConsultaDteMergedPages(
       token,
@@ -281,7 +291,7 @@ export async function runSatFelExtraction(opts: {
       opts.dateFrom,
       opts.dateTo,
       "R",
-      { dateFormat: "ddmmyyyy", onCheckpoint: mergeCp("R") }
+      { dateFormat: "ddmmyyyy", onCheckpoint: mergeCp("R"), nitReceptorQueryValue: nitForReceptor }
     )
     const codeE = felMessageFromResponse(preSalesDd).codigo
     const codeR = felMessageFromResponse(prePurchasesDd).codigo
@@ -325,6 +335,7 @@ export async function runSatFelExtraction(opts: {
       {
         dateFormat: dateFormatUsed,
         onCheckpoint: (stage, detail) => cp(`sat.zip_emitidos.${stage}`, detail),
+        nitReceptorQueryValue: nitForReceptor,
       }
     )
     cp("sat.zip_xml_emitidos_done", `xml_docs=${xmlSales.length}`)
@@ -345,6 +356,7 @@ export async function runSatFelExtraction(opts: {
       {
         dateFormat: dateFormatUsed,
         onCheckpoint: (stage, detail) => cp(`sat.zip_recibidos.${stage}`, detail),
+        nitReceptorQueryValue: nitForReceptor,
       }
     )
     cp("sat.zip_xml_recibidos_done", `xml_docs=${xmlPurchases.length}`)
@@ -435,6 +447,7 @@ export async function runSatFelExtraction(opts: {
   cp("sat.run_complete", `rows=${rows.length}`)
   const diagnostics: SatFelRunDiagnostics = {
     felConsultaUsuario: apiUsuario,
+    felNitPerfil: opts.profileNit?.trim() || null,
     felDateFormatUsed: dateFormatUsed,
     queryWindow: {
       dateFrom: opts.dateFrom,

@@ -235,7 +235,8 @@ export function SatImportPanel({
             <code className="text-[11px]">SAT_PACKAGED_CHROMIUM=1</code>. La API FEL usa fechas{" "}
             <strong>YYYY-MM-DD</strong> salvo que definas{" "}
             <code className="text-[11px]">SAT_FEL_TRY_DDMM=1</code> en el servidor (casi siempre el SAT devuelve error con
-            dd/MM en la URL).
+            dd/MM en la URL). La consulta DTE usa el mismo <span className="font-mono">usuario=</span> que el login del
+            portal (criterio <span className="font-mono">reference/moore-rpa-main</span>), no el NIT por defecto.
           </p>
         </CardContent>
       </Card>
@@ -323,10 +324,15 @@ export function SatImportPanel({
             <div className="rounded-lg border border-gray-200 bg-gray-50/90 p-4 text-xs text-gray-700 space-y-2">
               <p className="font-semibold text-gray-900">Diagnóstico de la consulta SAT</p>
               <p>
-                NIT / usuario en la API FEL:{" "}
-                <span className="font-mono text-[11px]">{diagnostics.felConsultaUsuario}</span> (debe coincidir con el
-                contribuyente; el login del portal puede ser otro).
+                Parámetro <span className="font-mono">usuario=</span> en la API (mismo criterio que{" "}
+                <span className="font-mono">reference/moore-rpa-main</span>, login del portal):{" "}
+                <span className="font-mono text-[11px]">{diagnostics.felConsultaUsuario}</span>
               </p>
+              {diagnostics.felNitPerfil ? (
+                <p className="text-gray-600">
+                  NIT en tu perfil (referencia): <span className="font-mono text-[11px]">{diagnostics.felNitPerfil}</span>
+                </p>
+              ) : null}
               <p className="text-gray-600">
                 Formato de fechas en la URL de la API:{" "}
                 <span className="font-mono">{diagnostics.felDateFormatUsed ?? "iso"}</span>
@@ -334,10 +340,10 @@ export function SatImportPanel({
                 {(diagnostics.felDateFormatUsed ?? "iso") === "iso" && " (YYYY-MM-DD)"}
               </p>
               <p className="text-gray-600">
-                Compras (tipo <span className="font-mono">R</span>): el mismo NIT se envía en{" "}
-                <span className="font-mono">nitIdReceptor</span> (el SAT suele exigirlo para listar facturas recibidas).
-                Si el despliegue devolviera error de consulta, en el servidor puedes definir{" "}
-                <span className="font-mono">SAT_FEL_OMIT_NIT_RECEPTOR=1</span> para volver al comportamiento anterior.
+                Por defecto <span className="font-mono">nitIdReceptor</span> va vacío (igual que moore-rpa). Si en tu
+                entorno las compras (R) no listan sin filtro, define en el servidor{" "}
+                <span className="font-mono">SAT_FEL_NIT_RECEPTOR_QUERY=1</span> para enviar el NIT del parámetro{" "}
+                <span className="font-mono">usuario=</span> en <span className="font-mono">nitIdReceptor</span>.
               </p>
               {diagnostics.queryWindow && (
                 <p
