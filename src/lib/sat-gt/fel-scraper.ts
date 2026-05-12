@@ -434,7 +434,7 @@ export async function runSatFelExtraction(opts: {
       (msgE.codigo?.toUpperCase().includes("ACCEPT") || msgR.codigo?.toUpperCase().includes("ACCEPT"))
     ) {
       warnings.push(
-        "El SAT respondió ACCEPTED con total=0 en emitidos y recibidos: no hay documentos en ese intervalo para el parámetro usuario= de la consulta. Verifica el mismo rango en el portal FEL; si ahí sí hay compras y aquí no, prueba SAT_FEL_NIT_RECEPTOR_QUERY=1 en el servidor (nitIdReceptor con el NIT del perfil)."
+        "El SAT respondió ACCEPTED con total=0 en emitidos y recibidos: no hay documentos en ese intervalo para el parámetro usuario= de la consulta. Verifica el mismo rango en el portal FEL. En compras (R), si tienes NIT en el perfil ya enviamos nitIdReceptor automáticamente; para forzar vacío como moore-rpa usa SAT_FEL_OMIT_NIT_RECEPTOR=1 en el servidor."
       )
     }
     if (hintE.maxArrayLengthSeen > 0 || hintR.maxArrayLengthSeen > 0) {

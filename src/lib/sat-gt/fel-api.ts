@@ -25,10 +25,26 @@ export type FelConsultaDteOpts = {
   tamanoPagina?: number
   onCheckpoint?: (stage: string, detail?: string) => void
   /**
-   * Si `SAT_FEL_NIT_RECEPTOR_QUERY=1` y `tipoOperacion=R`, se envía en `nitIdReceptor` (moore-rpa lo deja vacío).
-   * Usa el NIT del perfil, no el correo de `usuario=`.
+   * NIT del perfil (solo dígitos): en `tipoOperacion=R` se envía en `nitIdReceptor` salvo `SAT_FEL_OMIT_NIT_RECEPTOR=1`.
+   * Si no hay valor aquí y `SAT_FEL_NIT_RECEPTOR_QUERY=1`, se usa el `usuario=` (legacy).
    */
   nitReceptorQueryValue?: string
+}
+
+/** Valor de `nitIdReceptor` en consulta-dte / zip-xml para operación R. */
+export function felNitIdReceptorQueryParam(
+  operationType: "E" | "R",
+  usuario: string,
+  nitReceptorQueryValue?: string
+): string {
+  if (operationType !== "R" || process.env.SAT_FEL_OMIT_NIT_RECEPTOR === "1") return ""
+  const explicit = nitReceptorQueryValue?.trim() ?? ""
+  if (explicit !== "") return encodeURIComponent(explicit)
+  if (process.env.SAT_FEL_NIT_RECEPTOR_QUERY === "1") {
+    const u = usuario.trim()
+    if (u !== "") return encodeURIComponent(u)
+  }
+  return ""
 }
 
 export async function fetchFelConsultaDte(
@@ -43,12 +59,7 @@ export async function fetchFelConsultaDte(
   const fmt = opts?.dateFormat ?? "iso"
   const s = fmt === "ddmmyyyy" ? isoDateToDdMmYyyy(startDate) : startDate
   const e = fmt === "ddmmyyyy" ? isoDateToDdMmYyyy(endDate) : endDate
-  /** Moore-rpa deja `nitIdReceptor` vacío. `SAT_FEL_NIT_RECEPTOR_QUERY=1` + `nitReceptorQueryValue` (NIT perfil) si el login es correo. */
-  const nitSrc = (opts?.nitReceptorQueryValue ?? user).trim()
-  const nitReceptor =
-    process.env.SAT_FEL_NIT_RECEPTOR_QUERY === "1" && operationType === "R" && nitSrc !== ""
-      ? encodeURIComponent(nitSrc)
-      : ""
+  const nitReceptor = felNitIdReceptorQueryParam(operationType, user, opts?.nitReceptorQueryValue)
   let url =
     `https://felcons.c.sat.gob.gt/dte-agencia-virtual/api/consulta-dte?usuario=${encodeURIComponent(user)}` +
     `&tipoOperacion=${operationType}&establecimiento=&tipoDte=&noAutorizacion=&nitIdReceptor=${nitReceptor}&estadoDte=&serie=&numero=&moneda=&montoTotalRangoIni=&montoTotalRangoFinal=&impuesto=&nitCertificador=&resultado=&fechaEmisionIni=${encodeURIComponent(s)}&fechaEmisionFinal=${encodeURIComponent(e)}`
@@ -245,11 +256,7 @@ export async function fetchFelZipXmlLines(
   opts?.onCheckpoint?.("start", `body_rows=${bodyRows.length}`)
   const s = fmt === "ddmmyyyy" ? isoDateToDdMmYyyy(startDate) : startDate
   const e = fmt === "ddmmyyyy" ? isoDateToDdMmYyyy(endDate) : endDate
-  const nitSrcZip = (opts?.nitReceptorQueryValue ?? user).trim()
-  const nitReceptorZip =
-    process.env.SAT_FEL_NIT_RECEPTOR_QUERY === "1" && operationType === "R" && nitSrcZip !== ""
-      ? encodeURIComponent(nitSrcZip)
-      : ""
+  const nitReceptorZip = felNitIdReceptorQueryParam(operationType, user, opts?.nitReceptorQueryValue)
   const url =
     `https://felcons.c.sat.gob.gt/dte-agencia-virtual/api/consulta-dte/zip-xml?usuario=${encodeURIComponent(user)}` +
     `&tipoOperacion=${operationType}&establecimiento=0&tipoDte=TDS&noAutorizacion=&nitIdReceptor=${nitReceptorZip}&estadoDte=TDS&serie=&numero=&moneda=TDS&montoTotalRangoIni=&montoTotalRangoFinal=&impuesto=&nitCertificador=&resultado=&fechaEmisionIni=${encodeURIComponent(s)}&fechaEmisionFinal=${encodeURIComponent(e)}`

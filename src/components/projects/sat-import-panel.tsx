@@ -340,9 +340,11 @@ export function SatImportPanel({
                 {(diagnostics.felDateFormatUsed ?? "iso") === "iso" && " (YYYY-MM-DD)"}
               </p>
               <p className="text-gray-600">
-                Por defecto <span className="font-mono">nitIdReceptor</span> va vacío (igual que moore-rpa). Si en tu
-                entorno las compras (R) no listan sin filtro, define en el servidor{" "}
-                <span className="font-mono">SAT_FEL_NIT_RECEPTOR_QUERY=1</span> para enviar el NIT del parámetro{" "}
+                En compras (<span className="font-mono">R</span>), si guardaste un <strong>NIT</strong> en tu perfil, la
+                API envía ese valor en <span className="font-mono">nitIdReceptor</span> automáticamente (muchas
+                instalaciones del SAT lo requieren). Para dejarlo vacío como moore-rpa, define{" "}
+                <span className="font-mono">SAT_FEL_OMIT_NIT_RECEPTOR=1</span> en el servidor. Sin NIT en perfil pero con{" "}
+                <span className="font-mono">SAT_FEL_NIT_RECEPTOR_QUERY=1</span>, se usa el mismo texto que en{" "}
                 <span className="font-mono">usuario=</span> en <span className="font-mono">nitIdReceptor</span>.
               </p>
               {diagnostics.queryWindow && (
@@ -430,10 +432,14 @@ export function SatImportPanel({
                 <p className="font-medium text-indigo-950">Si en el portal FEL ves compras (recibidas) y aquí no</p>
                 <ol className="mt-1.5 list-decimal list-inside space-y-1 text-[11px] text-gray-700">
                   <li>
-                    En el servidor (p. ej. Vercel), define{" "}
-                    <code className="rounded bg-white/80 px-1 text-[10px]">SAT_FEL_NIT_RECEPTOR_QUERY=1</code> y
-                    redespliega: la API enviará tu NIT del perfil en{" "}
-                    <span className="font-mono">nitIdReceptor</span> para la operación R (compras).
+                    Confirma que en <strong>Mi perfil</strong> tienes el <strong>NIT del receptor</strong> de esas
+                    compras: con NIT guardado, la app ya envía <span className="font-mono">nitIdReceptor</span> en la
+                    operación R. Si aun así no ves filas, prueba el mismo rango en el portal FEL.
+                  </li>
+                  <li>
+                    Si necesitas comportamiento idéntico a moore-rpa (sin <span className="font-mono">nitIdReceptor</span>
+                    ), define <code className="rounded bg-white/80 px-1 text-[10px]">SAT_FEL_OMIT_NIT_RECEPTOR=1</code>{" "}
+                    en el servidor y redespliega.
                   </li>
                   <li>
                     Usa el <strong>mismo usuario</strong> con el que entras al portal y el <strong>mismo rango de fechas</strong>{" "}
