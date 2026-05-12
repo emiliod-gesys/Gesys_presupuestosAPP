@@ -23,6 +23,22 @@ function defaultSatDateRange() {
   }
 }
 
+/** Eco legible (es-GT) a partir de YYYY-MM-DD para evitar confusión con día/mes en el picker. */
+function formatIsoDateEsGT(iso: string): string | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso.trim())
+  if (!m) return null
+  const y = Number(m[1])
+  const mo = Number(m[2]) - 1
+  const d = Number(m[3])
+  if (!Number.isFinite(y) || mo < 0 || mo > 11 || d < 1 || d > 31) return null
+  const local = new Date(y, mo, d)
+  try {
+    return new Intl.DateTimeFormat("es-GT", { day: "numeric", month: "long", year: "numeric" }).format(local)
+  } catch {
+    return null
+  }
+}
+
 export function SatImportPanel({
   projectId,
   currency,
@@ -204,6 +220,15 @@ export function SatImportPanel({
 
   const selectableRows = rows.filter((r) => !r.anulado)
 
+  const rangoLegibleGt =
+    filtersReady && dateFrom && dateTo
+      ? (() => {
+          const a = formatIsoDateEsGT(dateFrom)
+          const b = formatIsoDateEsGT(dateTo)
+          return a && b ? `${a} → ${b}` : null
+        })()
+      : null
+
   return (
     <div className="space-y-8">
       <Card className="border-emerald-800/15">
@@ -220,11 +245,18 @@ export function SatImportPanel({
             <Input label="Hasta" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
           </div>
           <p className="text-xs text-gray-600">
-            Rango que se envía al SAT (orden calendario ISO, año-mes-día):{" "}
+            Rango que se envía al SAT (orden calendario ISO, <strong>año-mes-día</strong>):{" "}
             <span className="font-mono text-[11px]">{dateFrom || "—"}</span> →{" "}
-            <span className="font-mono text-[11px]">{dateTo || "—"}</span>. El control puede verse en formato local, pero
-            el valor es siempre <strong>YYYY-MM-DD</strong>.
+            <span className="font-mono text-[11px]">{dateTo || "—"}</span>. El control de fecha del navegador puede verse
+            distinto según idioma, pero el valor interno es siempre <strong>YYYY-MM-DD</strong> (el primer número es el{" "}
+            <strong>año</strong>, no el día).
           </p>
+          {rangoLegibleGt && (
+            <p className="text-xs text-gray-700 rounded-md border border-gray-200 bg-gray-50/90 px-3 py-2">
+              Mismo rango en español (referencia): <span className="font-medium text-gray-900">{rangoLegibleGt}</span>.
+              Si esperabas otras fechas (p. ej. 4 de enero y no 1 de abril), revisa el rango ISO de arriba.
+            </p>
+          )}
           {dateToAfterUtcToday && (
             <p className="text-xs text-amber-950 bg-amber-100/90 rounded-lg px-3 py-2 border border-amber-200">
               «Hasta» es posterior a hoy en UTC (<span className="font-mono">{utcTodayIso}</span>). El SAT no lista
