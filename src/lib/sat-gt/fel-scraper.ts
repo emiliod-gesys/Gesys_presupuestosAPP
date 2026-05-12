@@ -193,7 +193,7 @@ export async function runSatFelExtraction(opts: {
       if (errorMessageText?.trim()) throw new Error("Invalid credentials")
     }
 
-    await new Promise((r) => setTimeout(r, 4000))
+    await new Promise((r) => setTimeout(r, 5000))
     await page.waitForSelector("#btnContraerMenu", { visible: true, timeout: 45000 })
     cp("sat.post_login_menu_visible")
     await page.click("#btnContraerMenu")
@@ -434,7 +434,7 @@ export async function runSatFelExtraction(opts: {
       (msgE.codigo?.toUpperCase().includes("ACCEPT") || msgR.codigo?.toUpperCase().includes("ACCEPT"))
     ) {
       warnings.push(
-        "El SAT respondió ACCEPTED con total=0 en emitidos y recibidos: no hay documentos en ese intervalo para el parámetro usuario= de la consulta. Verifica el mismo rango en el portal FEL. En compras (R), si tienes NIT en el perfil ya enviamos nitIdReceptor automáticamente; para forzar vacío como moore-rpa usa SAT_FEL_OMIT_NIT_RECEPTOR=1 en el servidor."
+        "El SAT respondió ACCEPTED con total=0 en emitidos y recibidos: no hay documentos en ese intervalo para el parámetro usuario= de la consulta. Verifica el mismo rango en el portal FEL. En R, nitIdReceptor solo se envía si el NIT del perfil difiere del login; si entras con el mismo NIT que en perfil, queda vacío como moore-rpa. SAT_FEL_OMIT_NIT_RECEPTOR=1 fuerza siempre vacío; SAT_FEL_FORCE_NIT_RECEPTOR=1 fuerza enviarlo aunque coincida."
       )
     }
     if (hintE.maxArrayLengthSeen > 0 || hintR.maxArrayLengthSeen > 0) {

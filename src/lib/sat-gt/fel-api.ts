@@ -25,10 +25,17 @@ export type FelConsultaDteOpts = {
   tamanoPagina?: number
   onCheckpoint?: (stage: string, detail?: string) => void
   /**
-   * NIT del perfil (solo dígitos): en `tipoOperacion=R` se envía en `nitIdReceptor` salvo `SAT_FEL_OMIT_NIT_RECEPTOR=1`.
-   * Si no hay valor aquí y `SAT_FEL_NIT_RECEPTOR_QUERY=1`, se usa el `usuario=` (legacy).
+   * NIT del perfil (receptor): en `R` se envía en `nitIdReceptor` solo si **diffiere** de `usuario=` (p. ej. correo en
+   * login y NIT en perfil). Si login y NIT son el mismo valor, se deja vacío como moore-rpa (duplicar puede vaciar la respuesta).
+   * `SAT_FEL_OMIT_NIT_RECEPTOR=1`: siempre vacío. Sin NIT aquí y `SAT_FEL_NIT_RECEPTOR_QUERY=1`: se usa `usuario=`.
    */
   nitReceptorQueryValue?: string
+}
+
+function felIdsEquivalentForReceptor(a: string, b: string): boolean {
+  const da = a.replace(/\D/g, "")
+  const db = b.replace(/\D/g, "")
+  return da.length > 0 && db.length > 0 && da === db
 }
 
 /** Valor de `nitIdReceptor` en consulta-dte / zip-xml para operación R. */
@@ -39,10 +46,15 @@ export function felNitIdReceptorQueryParam(
 ): string {
   if (operationType !== "R" || process.env.SAT_FEL_OMIT_NIT_RECEPTOR === "1") return ""
   const explicit = nitReceptorQueryValue?.trim() ?? ""
-  if (explicit !== "") return encodeURIComponent(explicit)
-  if (process.env.SAT_FEL_NIT_RECEPTOR_QUERY === "1") {
-    const u = usuario.trim()
-    if (u !== "") return encodeURIComponent(u)
+  const u = usuario.trim()
+  if (explicit !== "") {
+    if (!process.env.SAT_FEL_FORCE_NIT_RECEPTOR && felIdsEquivalentForReceptor(explicit, u)) {
+      return ""
+    }
+    return encodeURIComponent(explicit)
+  }
+  if (process.env.SAT_FEL_NIT_RECEPTOR_QUERY === "1" && u !== "") {
+    return encodeURIComponent(u)
   }
   return ""
 }
