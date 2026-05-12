@@ -60,6 +60,13 @@ export interface SatFelRunDiagnostics {
   felConsultaUsuario: string
   /** Formato de fecha usado en la URL de consulta-dte (último intento que devolvió datos o el reintento). */
   felDateFormatUsed?: "iso" | "ddmmyyyy"
+  /** Rango enviado al SAT y si «hasta» queda en el futuro respecto al día UTC del servidor (suele dar total 0). */
+  queryWindow?: {
+    dateFrom: string
+    dateTo: string
+    utcToday: string
+    dateToAfterUtcToday: boolean
+  }
   responseHints?: {
     emitidos: SatFelResponseShapeHint
     recibidos: SatFelResponseShapeHint

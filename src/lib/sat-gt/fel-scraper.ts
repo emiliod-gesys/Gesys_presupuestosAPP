@@ -397,7 +397,15 @@ export async function runSatFelExtraction(opts: {
   const sliceDiagE = getConsultaDtePagedSlice(preSales)
   const sliceDiagR = getConsultaDtePagedSlice(prePurchases)
 
+  const utcToday = new Date().toISOString().slice(0, 10)
+  const dateToAfterUtcToday = opts.dateTo > utcToday
+
   if (salesList.length === 0 && purchaseList.length === 0) {
+    if (dateToAfterUtcToday) {
+      warnings.push(
+        `La fecha «hasta» de la consulta (${opts.dateTo}) es posterior al día UTC de hoy (${utcToday}). El SAT no devuelve documentos con fecha de emisión futura; es normal ver total=0 y lista vacía. Pon «hasta» en el último día con facturas o en hoy.`
+      )
+    }
     if (msgE.mensaje || msgR.mensaje) {
       warnings.push(
         `SAT: ${[msgE.mensaje, msgR.mensaje].filter(Boolean).join(" · ") || "Sin detalle en la respuesta."}`
@@ -405,6 +413,16 @@ export async function runSatFelExtraction(opts: {
     } else {
       warnings.push(
         "No hay DTE en el rango de fechas para este NIT en la consulta del SAT (emitidos ni recibidos). Prueba otras fechas o confirma en el portal FEL que existan documentos."
+      )
+    }
+    if (
+      !dateToAfterUtcToday &&
+      sliceDiagE.totalReported === 0 &&
+      sliceDiagR.totalReported === 0 &&
+      (msgE.codigo?.toUpperCase().includes("ACCEPT") || msgR.codigo?.toUpperCase().includes("ACCEPT"))
+    ) {
+      warnings.push(
+        "El SAT respondió ACCEPTED con total=0 en emitidos y recibidos: no hay documentos en ese intervalo para el NIT consultado. Comprueba el mismo rango en el portal FEL (Consultar DTE) y que el NIT del perfil sea el del contribuyente."
       )
     }
     if (hintE.maxArrayLengthSeen > 0 || hintR.maxArrayLengthSeen > 0) {
@@ -418,6 +436,12 @@ export async function runSatFelExtraction(opts: {
   const diagnostics: SatFelRunDiagnostics = {
     felConsultaUsuario: apiUsuario,
     felDateFormatUsed: dateFormatUsed,
+    queryWindow: {
+      dateFrom: opts.dateFrom,
+      dateTo: opts.dateTo,
+      utcToday,
+      dateToAfterUtcToday,
+    },
     responseHints: { emitidos: hintE, recibidos: hintR },
     checkpoints,
     emitidos: {

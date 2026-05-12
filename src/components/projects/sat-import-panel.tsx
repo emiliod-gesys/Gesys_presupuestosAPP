@@ -43,6 +43,7 @@ export function SatImportPanel({
   const { toast } = useToast()
   const router = useRouter()
   const range0 = useMemo(() => defaultSatDateRange(), [])
+  const utcTodayIso = useMemo(() => new Date().toISOString().slice(0, 10), [])
   const [dateFrom, setDateFrom] = useState(range0.from)
   const [dateTo, setDateTo] = useState(range0.to)
   const [rows, setRows] = useState<SatDteListRow[]>([])
@@ -63,6 +64,7 @@ export function SatImportPanel({
   const rowKey = (r: SatDteListRow) => `${r.flow}:${r.uuid}`
 
   const filtersReady = dateFrom.trim() !== "" && dateTo.trim() !== ""
+  const dateToAfterUtcToday = filtersReady && dateTo > utcTodayIso
 
   const loadFromSat = async () => {
     if (!filtersReady) {
@@ -213,6 +215,19 @@ export function SatImportPanel({
             <Input label="Desde" type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
             <Input label="Hasta" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
           </div>
+          <p className="text-xs text-gray-600">
+            Rango que se envía al SAT (orden calendario ISO, año-mes-día):{" "}
+            <span className="font-mono text-[11px]">{dateFrom || "—"}</span> →{" "}
+            <span className="font-mono text-[11px]">{dateTo || "—"}</span>. El control puede verse en formato local, pero
+            el valor es siempre <strong>YYYY-MM-DD</strong>.
+          </p>
+          {dateToAfterUtcToday && (
+            <p className="text-xs text-amber-950 bg-amber-100/90 rounded-lg px-3 py-2 border border-amber-200">
+              «Hasta» es posterior a hoy en UTC (<span className="font-mono">{utcTodayIso}</span>). El SAT no lista
+              documentos con emisión futura: obtendrás <strong>total 0</strong> y lista vacía. Ajusta la fecha final al
+              último día con facturas o a hoy.
+            </p>
+          )}
           <p className="text-xs text-amber-800 bg-amber-50/80 rounded-lg px-3 py-2 border border-amber-100">
             En Vercel/AWS Lambda se usa Chromium empaquetado (@sparticuz/chromium). En tu PC:{" "}
             <code className="text-[11px]">npx puppeteer browsers install chrome</code> si falla el navegador. Opcional:{" "}
@@ -324,6 +339,25 @@ export function SatImportPanel({
                 Si el despliegue devolviera error de consulta, en el servidor puedes definir{" "}
                 <span className="font-mono">SAT_FEL_OMIT_NIT_RECEPTOR=1</span> para volver al comportamiento anterior.
               </p>
+              {diagnostics.queryWindow && (
+                <p
+                  className={
+                    diagnostics.queryWindow.dateToAfterUtcToday
+                      ? "rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-amber-950"
+                      : "text-gray-600"
+                  }
+                >
+                  Ventana consultada (eco del servidor):{" "}
+                  <span className="font-mono">{diagnostics.queryWindow.dateFrom}</span> →{" "}
+                  <span className="font-mono">{diagnostics.queryWindow.dateTo}</span>
+                  {diagnostics.queryWindow.dateToAfterUtcToday ? (
+                    <>
+                      {" "}
+                      — «hasta» posterior a hoy UTC ({diagnostics.queryWindow.utcToday}), suele explicar total 0.
+                    </>
+                  ) : null}
+                </p>
+              )}
               <ul className="list-none space-y-1.5 font-mono text-[11px]">
                 <li>
                   Emitidos (E): crudos {diagnostics.emitidos.rawListLength} → importables{" "}
