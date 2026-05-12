@@ -424,7 +424,7 @@ export async function runSatFelExtraction(opts: {
       )
     } else {
       warnings.push(
-        "No hay DTE en el rango de fechas para este NIT en la consulta del SAT (emitidos ni recibidos). Prueba otras fechas o confirma en el portal FEL que existan documentos."
+        "No hay DTE en el rango indicado para el usuario de la consulta (emitidos ni recibidos). Prueba otras fechas o confirma en el portal FEL (Consultar DTE) con el mismo usuario y rango."
       )
     }
     if (
@@ -434,7 +434,7 @@ export async function runSatFelExtraction(opts: {
       (msgE.codigo?.toUpperCase().includes("ACCEPT") || msgR.codigo?.toUpperCase().includes("ACCEPT"))
     ) {
       warnings.push(
-        "El SAT respondió ACCEPTED con total=0 en emitidos y recibidos: no hay documentos en ese intervalo para el NIT consultado. Comprueba el mismo rango en el portal FEL (Consultar DTE) y que el NIT del perfil sea el del contribuyente."
+        "El SAT respondió ACCEPTED con total=0 en emitidos y recibidos: no hay documentos en ese intervalo para el parámetro usuario= de la consulta. Verifica el mismo rango en el portal FEL; si ahí sí hay compras y aquí no, prueba SAT_FEL_NIT_RECEPTOR_QUERY=1 en el servidor (nitIdReceptor con el NIT del perfil)."
       )
     }
     if (hintE.maxArrayLengthSeen > 0 || hintR.maxArrayLengthSeen > 0) {

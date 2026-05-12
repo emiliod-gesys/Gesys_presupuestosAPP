@@ -60,11 +60,11 @@ export async function fetchFelConsultaDte(
   }
 
   try {
+    /** Cabeceras mínimas como `reference/moore-rpa-main/src/api.ts` (sin Accept). */
     const response = await axios.get(url, {
       headers: {
         Authorization: token.trim(),
         Cookie: cookieHeader,
-        Accept: "application/json",
       },
     })
     return response.data
@@ -258,7 +258,6 @@ export async function fetchFelZipXmlLines(
     headers: {
       Authorization: token.trim(),
       Cookie: cookieHeader,
-      Accept: "application/json",
       "Content-Type": "application/json",
     },
     responseType: "arraybuffer",

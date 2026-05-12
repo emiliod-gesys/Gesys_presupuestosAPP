@@ -106,7 +106,7 @@ export function SatImportPanel({
       if (list.length === 0) {
         toast(
           "error",
-          "No hay facturas listadas para importar. Revisa el diagnóstico abajo (NIT en consulta, rango de fechas y mensaje del SAT)."
+          "No hay facturas listadas para importar. Revisa el diagnóstico abajo (usuario= en la API, rango de fechas y mensaje del SAT)."
         )
       } else {
         toast("success", `${list.length} DTE en el período`)
@@ -428,7 +428,8 @@ export function SatImportPanel({
               )}
               <p className="text-gray-500">
                 Si «crudos» es mayor que «importables», el JSON del SAT cambió de forma; si ambos son 0, no hay datos en
-                ese rango o el NIT de consulta no es el correcto.
+                ese rango o el <span className="font-mono">usuario=</span> de la consulta no corresponde al contribuyente
+                esperado (comprueba en el portal FEL con el mismo usuario).
               </p>
             </div>
           )}
