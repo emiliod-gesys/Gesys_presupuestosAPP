@@ -62,12 +62,21 @@ export interface SatFelRunDiagnostics {
   felNitPerfil?: string | null
   /** Formato de fecha usado en la URL de consulta-dte (último intento que devolvió datos o el reintento). */
   felDateFormatUsed?: "iso" | "ddmmyyyy"
-  /** Rango enviado al SAT y si «hasta» queda en el futuro respecto al día UTC del servidor (suele dar total 0). */
+  /**
+   * Rango solicitado vs rango efectivo en las peticiones al SAT.
+   * Si «hasta» o «desde» son futuras en UTC, el scraper acota por defecto (salvo SAT_FEL_DISABLE_DATE_CLAMP=1).
+   */
   queryWindow?: {
     dateFrom: string
     dateTo: string
+    /** Fechas realmente enviadas a consulta-dte / zip-xml (pueden coincidir con dateFrom/dateTo). */
+    effectiveDateFrom?: string
+    effectiveDateTo?: string
     utcToday: string
+    /** La fecha «hasta» pedida por el usuario supera hoy UTC (antes de acotar). */
     dateToAfterUtcToday: boolean
+    /** Se aplicó acotación automática del rango (por defecto activa). */
+    datesClamped?: boolean
   }
   /** Eco de parámetros de consulta-dte (R y establecimiento) para comparar con el portal / moore-rpa. */
   felQueryEcho?: {

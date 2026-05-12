@@ -158,7 +158,29 @@ export async function runSatFelExtraction(opts: {
     checkpoints.push(row)
   }
 
-  cp("sat.run_start", `range=${opts.dateFrom}..${opts.dateTo}`)
+  const utcTodayClamp = new Date().toISOString().slice(0, 10)
+  const disableDateClamp = process.env.SAT_FEL_DISABLE_DATE_CLAMP === "1"
+  let qFrom = opts.dateFrom.trim()
+  let qTo = opts.dateTo.trim()
+  let datesClamped = false
+  if (!disableDateClamp) {
+    if (qTo > utcTodayClamp) {
+      qTo = utcTodayClamp
+      datesClamped = true
+      warnings.push(
+        `La fecha «hasta» solicitada (${opts.dateTo}) es posterior al día UTC de hoy (${utcTodayClamp}). Se usó ${qTo} como fecha final en las peticiones al SAT (las emisiones futuras no existen).`
+      )
+    }
+    if (qFrom > qTo) {
+      warnings.push(
+        `La fecha «desde» (${opts.dateFrom}) quedó después de la fecha final efectiva (${qTo}); se consultó solo el día ${qTo}.`
+      )
+      qFrom = qTo
+      datesClamped = true
+    }
+  }
+
+  cp("sat.run_start", `requested=${opts.dateFrom}..${opts.dateTo} query=${qFrom}..${qTo}`)
   const username = opts.portalLogin.trim()
   /** Igual que moore-rpa `routes.ts` → `fetchDataFromAPI(..., username, ...)`: `usuario=` = login del portal. */
   const apiUsuario = username || opts.felConsultaUsuario.trim()
@@ -210,6 +232,8 @@ export async function runSatFelExtraction(opts: {
       waitUntil: "domcontentloaded",
     })
     cp("sat.felcons_consulta_page")
+    /** Dejar que la SPA de felcons asiente cookies / token antes de leerlos (moore-rpa espera 1s; aquí un poco más). */
+    await new Promise((r) => setTimeout(r, 2000))
 
     const { accessTokenCookie, cookies } = await getAccessTokenCookie(page, 25000)
     if (!accessTokenCookie?.value) {
@@ -246,8 +270,8 @@ export async function runSatFelExtraction(opts: {
     token,
     cookieHeader,
     apiUsuario,
-    opts.dateFrom,
-    opts.dateTo,
+    qFrom,
+    qTo,
     "E",
     { dateFormat: "iso", onCheckpoint: mergeCp("E"), nitReceptorQueryValue: nitForReceptor }
   )
@@ -256,8 +280,8 @@ export async function runSatFelExtraction(opts: {
     token,
     cookieHeader,
     apiUsuario,
-    opts.dateFrom,
-    opts.dateTo,
+    qFrom,
+    qTo,
     "R",
     { dateFormat: "iso", onCheckpoint: mergeCp("R"), nitReceptorQueryValue: nitForReceptor }
   )
@@ -281,8 +305,8 @@ export async function runSatFelExtraction(opts: {
       token,
       cookieHeader,
       apiUsuario,
-      opts.dateFrom,
-      opts.dateTo,
+      qFrom,
+      qTo,
       "E",
       { dateFormat: "ddmmyyyy", onCheckpoint: mergeCp("E"), nitReceptorQueryValue: nitForReceptor }
     )
@@ -290,8 +314,8 @@ export async function runSatFelExtraction(opts: {
       token,
       cookieHeader,
       apiUsuario,
-      opts.dateFrom,
-      opts.dateTo,
+      qFrom,
+      qTo,
       "R",
       { dateFormat: "ddmmyyyy", onCheckpoint: mergeCp("R"), nitReceptorQueryValue: nitForReceptor }
     )
@@ -330,8 +354,8 @@ export async function runSatFelExtraction(opts: {
       token,
       cookieHeader,
       apiUsuario,
-      opts.dateFrom,
-      opts.dateTo,
+      qFrom,
+      qTo,
       "E",
       salesList,
       {
@@ -351,8 +375,8 @@ export async function runSatFelExtraction(opts: {
       token,
       cookieHeader,
       apiUsuario,
-      opts.dateFrom,
-      opts.dateTo,
+      qFrom,
+      qTo,
       "R",
       purchaseList,
       {
@@ -411,13 +435,13 @@ export async function runSatFelExtraction(opts: {
   const sliceDiagE = getConsultaDtePagedSlice(preSales)
   const sliceDiagR = getConsultaDtePagedSlice(prePurchases)
 
-  const utcToday = new Date().toISOString().slice(0, 10)
+  const utcToday = utcTodayClamp
   const dateToAfterUtcToday = opts.dateTo > utcToday
 
   if (salesList.length === 0 && purchaseList.length === 0) {
-    if (dateToAfterUtcToday) {
+    if (dateToAfterUtcToday && disableDateClamp) {
       warnings.push(
-        `La fecha «hasta» de la consulta (${opts.dateTo}) es posterior al día UTC de hoy (${utcToday}). El SAT no devuelve documentos con fecha de emisión futura; es normal ver total=0 y lista vacía. Pon «hasta» en el último día con facturas o en hoy.`
+        `La fecha «hasta» de la consulta (${opts.dateTo}) es posterior al día UTC de hoy (${utcToday}). El SAT no devuelve documentos con fecha de emisión futura; es normal ver total=0 y lista vacía. Quita SAT_FEL_DISABLE_DATE_CLAMP o ajusta las fechas.`
       )
     }
     if (msgE.mensaje || msgR.mensaje) {
@@ -430,7 +454,7 @@ export async function runSatFelExtraction(opts: {
       )
     }
     if (
-      !dateToAfterUtcToday &&
+      (!dateToAfterUtcToday || datesClamped) &&
       sliceDiagE.totalReported === 0 &&
       sliceDiagR.totalReported === 0 &&
       (msgE.codigo?.toUpperCase().includes("ACCEPT") || msgR.codigo?.toUpperCase().includes("ACCEPT"))
@@ -454,8 +478,11 @@ export async function runSatFelExtraction(opts: {
     queryWindow: {
       dateFrom: opts.dateFrom,
       dateTo: opts.dateTo,
+      effectiveDateFrom: qFrom,
+      effectiveDateTo: qTo,
       utcToday,
       dateToAfterUtcToday,
+      datesClamped,
     },
     felQueryEcho: {
       nitIdReceptorRecibidos: felNitIdReceptorQueryExplain(apiUsuario, opts.profileNit),

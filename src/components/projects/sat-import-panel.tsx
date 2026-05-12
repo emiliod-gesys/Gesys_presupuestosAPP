@@ -259,9 +259,10 @@ export function SatImportPanel({
           )}
           {dateToAfterUtcToday && (
             <p className="text-xs text-amber-950 bg-amber-100/90 rounded-lg px-3 py-2 border border-amber-200">
-              «Hasta» es posterior a hoy en UTC (<span className="font-mono">{utcTodayIso}</span>). El SAT no lista
-              documentos con emisión futura: obtendrás <strong>total 0</strong> y lista vacía. Ajusta la fecha final al
-              último día con facturas o a hoy.
+              «Hasta» es posterior a hoy en UTC (<span className="font-mono">{utcTodayIso}</span>). En el servidor la
+              consulta al SAT se <strong>acota automáticamente</strong> a ese día como fecha final (salvo{" "}
+              <code className="text-[11px]">SAT_FEL_DISABLE_DATE_CLAMP=1</code> en despliegue). Si ves total 0, revisa
+              también el rango efectivo en el diagnóstico tras extraer.
             </p>
           )}
           <p className="text-xs text-amber-800 bg-amber-50/80 rounded-lg px-3 py-2 border border-amber-100">
@@ -387,23 +388,46 @@ export function SatImportPanel({
                 <span className="font-mono">usuario=</span> en <span className="font-mono">nitIdReceptor</span>.
               </p>
               {diagnostics.queryWindow && (
-                <p
+                <div
                   className={
-                    diagnostics.queryWindow.dateToAfterUtcToday
-                      ? "rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-amber-950"
-                      : "text-gray-600"
+                    diagnostics.queryWindow.dateToAfterUtcToday && !diagnostics.queryWindow.datesClamped
+                      ? "rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-amber-950 text-xs space-y-1"
+                      : "text-gray-600 text-xs space-y-1"
                   }
                 >
-                  Ventana consultada (eco del servidor):{" "}
-                  <span className="font-mono">{diagnostics.queryWindow.dateFrom}</span> →{" "}
-                  <span className="font-mono">{diagnostics.queryWindow.dateTo}</span>
-                  {diagnostics.queryWindow.dateToAfterUtcToday ? (
-                    <>
-                      {" "}
-                      — «hasta» posterior a hoy UTC ({diagnostics.queryWindow.utcToday}), suele explicar total 0.
-                    </>
-                  ) : null}
-                </p>
+                  <p>
+                    Ventana <strong>solicitada</strong>:{" "}
+                    <span className="font-mono">{diagnostics.queryWindow.dateFrom}</span> →{" "}
+                    <span className="font-mono">{diagnostics.queryWindow.dateTo}</span>
+                    {diagnostics.queryWindow.dateToAfterUtcToday && !diagnostics.queryWindow.datesClamped ? (
+                      <>
+                        {" "}
+                        — «hasta» posterior a hoy UTC ({diagnostics.queryWindow.utcToday}). Con{" "}
+                        <span className="font-mono">SAT_FEL_DISABLE_DATE_CLAMP=1</span> el servidor no acota la fecha y
+                        el SAT suele devolver total 0.
+                      </>
+                    ) : null}
+                  </p>
+                  {(diagnostics.queryWindow.effectiveDateFrom != null &&
+                    diagnostics.queryWindow.effectiveDateTo != null &&
+                    (diagnostics.queryWindow.datesClamped ||
+                      diagnostics.queryWindow.effectiveDateFrom !== diagnostics.queryWindow.dateFrom ||
+                      diagnostics.queryWindow.effectiveDateTo !== diagnostics.queryWindow.dateTo)) && (
+                    <p className="text-gray-800">
+                      Rango <strong>efectivo</strong> en la API del SAT:{" "}
+                      <span className="font-mono">
+                        {diagnostics.queryWindow.effectiveDateFrom ?? diagnostics.queryWindow.dateFrom}
+                      </span>{" "}
+                      →{" "}
+                      <span className="font-mono">
+                        {diagnostics.queryWindow.effectiveDateTo ?? diagnostics.queryWindow.dateTo}
+                      </span>
+                      {diagnostics.queryWindow.datesClamped ? (
+                        <> (acotado a hoy UTC o ajustado si «desde» quedaba después de «hasta»).</>
+                      ) : null}
+                    </p>
+                  )}
+                </div>
               )}
               {diagnostics.felQueryEcho && (
                 <p className="text-gray-600">

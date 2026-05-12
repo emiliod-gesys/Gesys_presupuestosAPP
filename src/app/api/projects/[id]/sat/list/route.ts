@@ -62,14 +62,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ message: "La fecha inicial no puede ser posterior a la final." }, { status: 400 })
   }
 
-  const todayIso = new Date().toISOString().slice(0, 10)
-  const dateFutureWarnings: string[] = []
-  if (dateTo > todayIso) {
-    dateFutureWarnings.push(
-      `La fecha «hasta» (${dateTo}) es posterior a la fecha del servidor (${todayIso}). El SAT solo devolverá documentos hasta hoy; revisa el año si esperabas otro mes/día.`
-    )
-  }
-
   const { data: sat } = await supabase
     .from("user_sat_gt_settings")
     .select("nit, portal_login, portal_password")
@@ -99,7 +91,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       dateFrom,
       dateTo,
     })
-    return NextResponse.json({ rows, warnings: [...dateFutureWarnings, ...warnings], diagnostics })
+    return NextResponse.json({ rows, warnings, diagnostics })
   } catch (e) {
     const message = formatSatFelUserError(e)
     const status = message.includes("Credenciales") ? 401 : 502
