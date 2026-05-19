@@ -1,5 +1,6 @@
 import axios, { type AxiosError } from "axios"
 import JSZip from "jszip"
+import type { Page } from "puppeteer-core"
 import { parseStringPromise } from "xml2js"
 import {
   felMessageFromResponse,
@@ -107,13 +108,83 @@ export function felNitIdReceptorQueryExplain(
   return { sent: false, reasonKey: "omit_sin_nit_perfil" }
 }
 
-const FELCONS_BROWSER_HEADERS = {
+/** Cabeceras extra en axios (Referer/Origin); moore-rpa solo usa Authorization + Cookie. */
+const FELCONS_EXTRA_AXIOS_HEADERS = {
   "User-Agent":
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
   Referer: "https://felcons.c.sat.gob.gt/dte-agencia-virtual/dte-consulta",
   Origin: "https://felcons.c.sat.gob.gt",
   Accept: "application/json, text/plain, */*",
 } as const
+
+function felConsultaAxiosHeaders(token: string, cookieHeader: string): Record<string, string> {
+  const base: Record<string, string> = {
+    Authorization: token.trim(),
+    Cookie: cookieHeader,
+  }
+  if (process.env.SAT_FEL_EXTRA_AXIOS_HEADERS === "1") {
+    return { ...base, ...FELCONS_EXTRA_AXIOS_HEADERS }
+  }
+  return base
+}
+
+/** URL de consulta-dte (mismos parámetros que moore-rpa). */
+export function buildFelConsultaDteUrl(
+  user: string,
+  startDate: string,
+  endDate: string,
+  operationType: "E" | "R",
+  opts?: FelConsultaDteOpts
+): string {
+  const fmt = opts?.dateFormat ?? "iso"
+  const s = fmt === "ddmmyyyy" ? isoDateToDdMmYyyy(startDate) : startDate
+  const e = fmt === "ddmmyyyy" ? isoDateToDdMmYyyy(endDate) : endDate
+  const nitReceptor = felNitIdReceptorQueryParam(
+    operationType,
+    user,
+    opts?.nitReceptorQueryValue,
+    opts?.forceNitIdReceptorWhenSameUsuario === true
+  )
+  const est = consultaDteEstablecimientoQuery(opts?.consultaEstablecimientoForceZero === true)
+  let url =
+    `https://felcons.c.sat.gob.gt/dte-agencia-virtual/api/consulta-dte?usuario=${encodeURIComponent(user)}` +
+    `&tipoOperacion=${operationType}&establecimiento=${est}&tipoDte=&noAutorizacion=&nitIdReceptor=${nitReceptor}&estadoDte=&serie=&numero=&moneda=&montoTotalRangoIni=&montoTotalRangoFinal=&impuesto=&nitCertificador=&resultado=&fechaEmisionIni=${encodeURIComponent(s)}&fechaEmisionFinal=${encodeURIComponent(e)}`
+  if (opts?.pagina != null && opts.pagina > 0) {
+    url += `&pagina=${encodeURIComponent(String(opts.pagina))}`
+  }
+  if (opts?.tamanoPagina != null && opts.tamanoPagina > 0) {
+    url += `&tamanoPagina=${encodeURIComponent(String(opts.tamanoPagina))}`
+  }
+  return url
+}
+
+/** GET consulta-dte desde la pestaña felcons (cookies de sesión del portal). */
+export async function fetchFelConsultaDteViaPage(page: Page, token: string, url: string): Promise<unknown> {
+  const auth = token.trim()
+  return page.evaluate(
+    async (requestUrl, authorization) => {
+      const res = await fetch(requestUrl, {
+        method: "GET",
+        credentials: "include",
+        headers: {
+          Authorization: authorization,
+          Accept: "application/json, text/plain, */*",
+        },
+      })
+      const text = await res.text()
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${text.slice(0, 240)}`)
+      }
+      try {
+        return JSON.parse(text) as unknown
+      } catch {
+        throw new Error(`Respuesta no JSON: ${text.slice(0, 160)}`)
+      }
+    },
+    url,
+    auth
+  )
+}
 
 function consultaDteEstablecimientoQuery(forceZero?: boolean): string {
   if (forceZero) return encodeURIComponent("0")
@@ -140,34 +211,11 @@ export async function fetchFelConsultaDte(
   operationType: "E" | "R",
   opts?: FelConsultaDteOpts
 ): Promise<unknown> {
-  const fmt = opts?.dateFormat ?? "iso"
-  const s = fmt === "ddmmyyyy" ? isoDateToDdMmYyyy(startDate) : startDate
-  const e = fmt === "ddmmyyyy" ? isoDateToDdMmYyyy(endDate) : endDate
-  const nitReceptor = felNitIdReceptorQueryParam(
-    operationType,
-    user,
-    opts?.nitReceptorQueryValue,
-    opts?.forceNitIdReceptorWhenSameUsuario === true
-  )
-  const est = consultaDteEstablecimientoQuery(opts?.consultaEstablecimientoForceZero === true)
-  let url =
-    `https://felcons.c.sat.gob.gt/dte-agencia-virtual/api/consulta-dte?usuario=${encodeURIComponent(user)}` +
-    `&tipoOperacion=${operationType}&establecimiento=${est}&tipoDte=&noAutorizacion=&nitIdReceptor=${nitReceptor}&estadoDte=&serie=&numero=&moneda=&montoTotalRangoIni=&montoTotalRangoFinal=&impuesto=&nitCertificador=&resultado=&fechaEmisionIni=${encodeURIComponent(s)}&fechaEmisionFinal=${encodeURIComponent(e)}`
-  if (opts?.pagina != null && opts.pagina > 0) {
-    url += `&pagina=${encodeURIComponent(String(opts.pagina))}`
-  }
-  if (opts?.tamanoPagina != null && opts.tamanoPagina > 0) {
-    url += `&tamanoPagina=${encodeURIComponent(String(opts.tamanoPagina))}`
-  }
+  const url = buildFelConsultaDteUrl(user, startDate, endDate, operationType, opts)
 
   try {
-    /** Cabeceras tipo navegador en felcons (Referer, Origin, Accept). */
     const response = await axios.get(url, {
-      headers: {
-        Authorization: token.trim(),
-        Cookie: cookieHeader,
-        ...FELCONS_BROWSER_HEADERS,
-      },
+      headers: felConsultaAxiosHeaders(token, cookieHeader),
     })
     return response.data
   } catch (error) {
@@ -196,6 +244,8 @@ export type FelConsultaDteMergedOpts = {
   nitReceptorQueryValue?: string
   forceNitIdReceptorWhenSameUsuario?: boolean
   consultaEstablecimientoForceZero?: boolean
+  /** Página en felcons tras login; prioriza fetch() del navegador (misma sesión que el portal). */
+  felconsPage?: Page | null
 }
 
 export async function fetchFelConsultaDteMergedPages(
@@ -213,7 +263,7 @@ export async function fetchFelConsultaDteMergedPages(
   k?.("start", `fmt=${fmt}`)
 
   async function one(extra: FelConsultaDteOpts): Promise<unknown> {
-    return fetchFelConsultaDte(token, cookieHeader, user, startDate, endDate, operationType, {
+    const reqOpts: FelConsultaDteOpts = {
       dateFormat: fmt,
       ...(nitRv ? { nitReceptorQueryValue: nitRv } : {}),
       ...(opts?.forceNitIdReceptorWhenSameUsuario === true
@@ -223,7 +273,19 @@ export async function fetchFelConsultaDteMergedPages(
         ? { consultaEstablecimientoForceZero: true }
         : {}),
       ...extra,
-    })
+    }
+    const url = buildFelConsultaDteUrl(user, startDate, endDate, operationType, reqOpts)
+    const page = opts?.felconsPage
+    if (page && process.env.SAT_FEL_DISABLE_BROWSER_FETCH !== "1") {
+      try {
+        k?.("transport", "browser")
+        return await fetchFelConsultaDteViaPage(page, token, url)
+      } catch (e) {
+        k?.("browser_fetch_fail", (e as Error).message?.slice(0, 160))
+      }
+    }
+    k?.("transport", "axios")
+    return fetchFelConsultaDte(token, cookieHeader, user, startDate, endDate, operationType, reqOpts)
   }
 
   /** Algunos despliegues del SAT devuelven `data` vacío solo con `pagina`; con `tamanoPagina` sí hay filas. */
@@ -366,12 +428,10 @@ export async function fetchFelZipXmlLines(
     `&tipoOperacion=${operationType}&establecimiento=0&tipoDte=TDS&noAutorizacion=&nitIdReceptor=${nitReceptorZip}&estadoDte=TDS&serie=&numero=&moneda=TDS&montoTotalRangoIni=&montoTotalRangoFinal=&impuesto=&nitCertificador=&resultado=&fechaEmisionIni=${encodeURIComponent(s)}&fechaEmisionFinal=${encodeURIComponent(e)}`
 
   const response = await axios.post<ArrayBuffer>(url, bodyRows, {
-    headers: {
-      Authorization: token.trim(),
-      Cookie: cookieHeader,
-      "Content-Type": "application/json",
-      ...FELCONS_BROWSER_HEADERS,
-    },
+      headers: {
+        ...felConsultaAxiosHeaders(token, cookieHeader),
+        "Content-Type": "application/json",
+      },
     responseType: "arraybuffer",
   })
   const buf = response.data

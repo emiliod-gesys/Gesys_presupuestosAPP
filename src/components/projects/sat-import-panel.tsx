@@ -434,7 +434,18 @@ export function SatImportPanel({
                 <span className="font-mono">{diagnostics.felDateFormatUsed ?? "iso"}</span>
                 {(diagnostics.felDateFormatUsed ?? "iso") === "ddmmyyyy" && " (dd/MM/yyyy)"}
                 {(diagnostics.felDateFormatUsed ?? "iso") === "iso" && " (YYYY-MM-DD)"}
+                {diagnostics.consultaTransport ? (
+                  <>
+                    {" "}
+                    · consulta vía <span className="font-mono">{diagnostics.consultaTransport}</span>
+                  </>
+                ) : null}
               </p>
+              {diagnostics.intentosConsulta && diagnostics.intentosConsulta.length > 0 ? (
+                <p className="text-xs text-indigo-900 bg-indigo-50/90 rounded-md border border-indigo-100 px-2 py-1.5">
+                  Intentos automáticos: <span className="font-mono">{diagnostics.intentosConsulta.join(", ")}</span>
+                </p>
+              ) : null}
               <p className="text-gray-600">
                 En compras (<span className="font-mono">R</span>), <span className="font-mono">nitIdReceptor</span> se
                 rellena con el NIT del perfil <strong>solo si es distinto</strong> del valor de{" "}

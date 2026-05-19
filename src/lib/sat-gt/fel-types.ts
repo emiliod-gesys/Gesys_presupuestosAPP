@@ -62,6 +62,10 @@ export interface SatFelRunDiagnostics {
   felNitPerfil?: string | null
   /** Formato de fecha usado en la URL de consulta-dte (último intento que devolvió datos o el reintento). */
   felDateFormatUsed?: "iso" | "ddmmyyyy"
+  /** Primera vía usada para consulta-dte: fetch en pestaña felcons vs axios desde el servidor. */
+  consultaTransport?: "browser" | "axios" | "mixed"
+  /** Estrategias de reintento ejecutadas (p. ej. establecimiento_zero, fechas_ddmm). */
+  intentosConsulta?: string[]
   /**
    * Rango solicitado vs rango efectivo en las peticiones al SAT.
    * Si «hasta» o «desde» son futuras en UTC, el scraper acota por defecto (salvo SAT_FEL_DISABLE_DATE_CLAMP=1).

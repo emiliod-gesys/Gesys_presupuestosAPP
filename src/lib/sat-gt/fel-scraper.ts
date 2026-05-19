@@ -197,6 +197,9 @@ export async function runSatFelExtraction(opts: {
 
   let token: string
   let cookieHeader: string
+  let felconsPage: Page | null = null
+  const intentosConsulta: string[] = []
+  let consultaTransport: "browser" | "axios" | "mixed" = "axios"
 
   try {
     const page = await browser.newPage()
@@ -245,10 +248,9 @@ export async function runSatFelExtraction(opts: {
     }
     token = accessTokenCookie.value
     cookieHeader = buildCookieHeader(cookies)
+    felconsPage = page
     cp("sat.access_token_ready", `cookies=${cookies.length}`)
-
-    await browser.close()
-    browser = null
+    await new Promise((r) => setTimeout(r, 1500))
   } catch (e) {
     if (browser) {
       await browser.close().catch(() => {})
@@ -261,12 +263,25 @@ export async function runSatFelExtraction(opts: {
   const mergeCp =
     (op: "E" | "R") =>
     (stage: string, detail?: string) => {
+      if (stage === "transport" && detail === "browser") {
+        consultaTransport = consultaTransport === "axios" ? "mixed" : "browser"
+        if (!intentosConsulta.includes("browser")) intentosConsulta.push("browser")
+      }
+      if (stage === "transport" && detail === "axios") {
+        consultaTransport = consultaTransport === "browser" ? "mixed" : "axios"
+        if (!intentosConsulta.includes("axios")) intentosConsulta.push("axios")
+      }
       cp(`sat.merge_${op === "E" ? "emitidos" : "recibidos"}.${stage}`, detail)
     }
 
   const nitForReceptor = opts.profileNit?.trim() || undefined
+  const mergedBase = {
+    felconsPage,
+    nitReceptorQueryValue: nitForReceptor,
+  }
 
   let dateFormatUsed: FelConsultaDateFormat = "iso"
+
   cp("sat.api_consulta_emitidos_start")
   const preSalesIso = await fetchFelConsultaDteMergedPages(
     token,
@@ -275,7 +290,7 @@ export async function runSatFelExtraction(opts: {
     qFrom,
     qTo,
     "E",
-    { dateFormat: "iso", onCheckpoint: mergeCp("E"), nitReceptorQueryValue: nitForReceptor }
+    { dateFormat: "iso", onCheckpoint: mergeCp("E"), ...mergedBase }
   )
   cp("sat.api_consulta_recibidos_start")
   const prePurchasesIso = await fetchFelConsultaDteMergedPages(
@@ -285,7 +300,7 @@ export async function runSatFelExtraction(opts: {
     qFrom,
     qTo,
     "R",
-    { dateFormat: "iso", onCheckpoint: mergeCp("R"), nitReceptorQueryValue: nitForReceptor }
+    { dateFormat: "iso", onCheckpoint: mergeCp("R"), ...mergedBase }
   )
 
   let preSales = preSalesIso
@@ -307,6 +322,7 @@ export async function runSatFelExtraction(opts: {
     (autoRetryOnEmpty || process.env.SAT_FEL_EMPTY_RETRY_ESTABLECIMIENTO_ZERO === "1")
   ) {
     cp("sat.retry_empty_establecimiento_zero")
+    intentosConsulta.push("establecimiento_zero")
     const preSalesZ = await fetchFelConsultaDteMergedPages(
       token,
       cookieHeader,
@@ -317,7 +333,7 @@ export async function runSatFelExtraction(opts: {
       {
         dateFormat: "iso",
         onCheckpoint: mergeCp("E"),
-        nitReceptorQueryValue: nitForReceptor,
+        ...mergedBase,
         consultaEstablecimientoForceZero: true,
       }
     )
@@ -331,7 +347,7 @@ export async function runSatFelExtraction(opts: {
       {
         dateFormat: "iso",
         onCheckpoint: mergeCp("R"),
-        nitReceptorQueryValue: nitForReceptor,
+        ...mergedBase,
         consultaEstablecimientoForceZero: true,
       }
     )
@@ -352,12 +368,13 @@ export async function runSatFelExtraction(opts: {
   }
 
   if (
-    purchaseList.length === 0 &&
+    (bothListsEmpty() || purchaseList.length === 0) &&
     (autoRetryOnEmpty || process.env.SAT_FEL_EMPTY_RETRY_R_DUPLICATE_NIT === "1") &&
     nitForReceptor &&
     felIdsEquivalentUsuarioNit(apiUsuario, nitForReceptor)
   ) {
     cp("sat.retry_empty_r_duplicate_nit")
+    intentosConsulta.push("r_nit_dup")
     const prePurchasesDup = await fetchFelConsultaDteMergedPages(
       token,
       cookieHeader,
@@ -368,7 +385,7 @@ export async function runSatFelExtraction(opts: {
       {
         dateFormat: "iso",
         onCheckpoint: mergeCp("R"),
-        nitReceptorQueryValue: nitForReceptor,
+        ...mergedBase,
         forceNitIdReceptorWhenSameUsuario: true,
       }
     )
@@ -392,6 +409,7 @@ export async function runSatFelExtraction(opts: {
     (autoRetryOnEmpty || process.env.SAT_FEL_TRY_DDMM === "1")
   ) {
     cp("sat.retry_ddmm_start")
+    intentosConsulta.push("fechas_ddmm")
     const preSalesDd = await fetchFelConsultaDteMergedPages(
       token,
       cookieHeader,
@@ -399,7 +417,7 @@ export async function runSatFelExtraction(opts: {
       qFrom,
       qTo,
       "E",
-      { dateFormat: "ddmmyyyy", onCheckpoint: mergeCp("E"), nitReceptorQueryValue: nitForReceptor }
+      { dateFormat: "ddmmyyyy", onCheckpoint: mergeCp("E"), ...mergedBase }
     )
     const prePurchasesDd = await fetchFelConsultaDteMergedPages(
       token,
@@ -408,7 +426,7 @@ export async function runSatFelExtraction(opts: {
       qFrom,
       qTo,
       "R",
-      { dateFormat: "ddmmyyyy", onCheckpoint: mergeCp("R"), nitReceptorQueryValue: nitForReceptor }
+      { dateFormat: "ddmmyyyy", onCheckpoint: mergeCp("R"), ...mergedBase }
     )
     const codeE = felMessageFromResponse(preSalesDd).codigo
     const codeR = felMessageFromResponse(prePurchasesDd).codigo
@@ -577,6 +595,8 @@ export async function runSatFelExtraction(opts: {
       dateToAfterUtcToday,
       datesClamped,
     },
+    consultaTransport,
+    intentosConsulta: intentosConsulta.length > 0 ? [...intentosConsulta] : undefined,
     felQueryEcho: {
       nitIdReceptorRecibidos: felNitIdReceptorQueryExplain(apiUsuario, opts.profileNit),
       fechaEmisionIni: fechaQuery.fechaEmisionIni,
@@ -603,6 +623,12 @@ export async function runSatFelExtraction(opts: {
       satTotalRegistros: sliceDiagR.totalReported,
       satTotalPagina: sliceDiagR.totalPaginaReported,
     },
+  }
+
+  if (browser) {
+    await browser.close().catch(() => {})
+    browser = null
+    felconsPage = null
   }
 
   return { rows, warnings, diagnostics }
