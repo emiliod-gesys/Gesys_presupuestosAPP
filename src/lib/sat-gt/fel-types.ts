@@ -70,6 +70,12 @@ export interface SatFelRunDiagnostics {
   recibidasQueryMode?: string | null
   /** Resumen de variantes R probadas (recepción vs emisión, nit, etc.). */
   recibidasAttempts?: { mode: string; rowCount: number }[]
+  /** Valores de usuario= probados si el primero devolvió 0 filas. */
+  felConsultaUsuariosProbados?: string[]
+  /** Pistas de localStorage/sessionStorage en felcons (sin secretos). */
+  felconsStorageHints?: Record<string, string>
+  /** Peticiones consulta-dte vistas en el navegador (URL acotada). */
+  portalSniffHits?: { operationType: string; rowCount: number; totalReported: number; urlRedacted: string }[]
   /**
    * Rango solicitado vs rango efectivo en las peticiones al SAT.
    * Si «hasta» o «desde» son futuras en UTC, el scraper acota por defecto (salvo SAT_FEL_DISABLE_DATE_CLAMP=1).

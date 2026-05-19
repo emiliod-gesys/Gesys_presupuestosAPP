@@ -11,7 +11,13 @@ import {
   type FelConsultaDateRangeKind,
   type FelXmlConverted,
 } from "./fel-api"
-import { captureConsultaDteViaPortalUi } from "./fel-portal-consulta"
+import {
+  attachFelconsConsultaSniffer,
+  captureConsultaDteViaPortalUi,
+  captureConsultaDteViaPortalUiEnhanced,
+  readFelconsStorageHints,
+} from "./fel-portal-consulta"
+import { buildFelConsultaUsuarioCandidates } from "./fel-token"
 import {
   countNormalizedRows,
   describeFelResponseShape,
@@ -188,7 +194,7 @@ export async function runSatFelExtraction(opts: {
   cp("sat.run_start", `requested=${opts.dateFrom}..${opts.dateTo} query=${qFrom}..${qTo}`)
   const username = opts.portalLogin.trim()
   /** Igual que moore-rpa `routes.ts` → `fetchDataFromAPI(..., username, ...)`: `usuario=` = login del portal. */
-  const apiUsuario = username || opts.felConsultaUsuario.trim()
+  let apiUsuario = username || opts.felConsultaUsuario.trim()
   const password = opts.portalPassword
   if (!username || !password) throw new Error("Faltan usuario o contraseña del portal SAT.")
   if (!apiUsuario) throw new Error("Falta usuario para consultar DTE en la API del SAT.")
@@ -254,6 +260,7 @@ export async function runSatFelExtraction(opts: {
     felconsPage = page
     cp("sat.access_token_ready", `cookies=${cookies.length}`)
     await new Promise((r) => setTimeout(r, 1500))
+
   } catch (e) {
     if (browser) {
       await browser.close().catch(() => {})
@@ -278,12 +285,67 @@ export async function runSatFelExtraction(opts: {
     }
 
   const nitForReceptor = opts.profileNit?.trim() || undefined
+  const usuarioCandidates = buildFelConsultaUsuarioCandidates(username, opts.profileNit, token)
+  if (usuarioCandidates[0]) apiUsuario = usuarioCandidates[0]
+  cp("sat.usuario_candidates", usuarioCandidates.slice(0, 6).join("|"))
   const mergedBase = {
     felconsPage,
     nitReceptorQueryValue: nitForReceptor,
   }
 
   let dateFormatUsed: FelConsultaDateFormat = "iso"
+  let portalSniffHits: SatFelRunDiagnostics["portalSniffHits"]
+  let felconsStorageHints: Record<string, string> | undefined
+  let recibidasAttempts: { mode: string; rowCount: number }[] = []
+
+  let prePurchases: unknown = {}
+  let purchaseList: Record<string, unknown>[] = []
+  let recibidasQueryMode: string | null = null
+  let recibidasDateKind: FelConsultaDateRangeKind = "emision"
+
+  if (felconsPage && process.env.SAT_FEL_DISABLE_PORTAL_UI !== "1") {
+    felconsStorageHints = await readFelconsStorageHints(felconsPage).catch(() => undefined)
+    cp("sat.felcons_storage", felconsStorageHints ? Object.keys(felconsStorageHints).join(",") : "none")
+
+    const loadSniffer = attachFelconsConsultaSniffer(felconsPage)
+    await new Promise((r) => setTimeout(r, 3500))
+    const loadHits = loadSniffer.stop()
+    portalSniffHits = loadHits.map((h) => ({
+      operationType: h.operationType,
+      rowCount: h.rowCount,
+      totalReported: h.totalReported,
+      urlRedacted: h.urlRedacted,
+    }))
+
+    cp("sat.portal_ui_recibidos_first")
+    intentosConsulta.push("portal_ui_r_first")
+    const portalFirst = await captureConsultaDteViaPortalUiEnhanced(felconsPage, "R", qFrom, qTo, (stage, detail) =>
+      cp(`sat.portal_first.${stage}`, detail)
+    )
+    portalSniffHits = [
+      ...(portalSniffHits ?? []),
+      ...portalFirst.hits.map((h) => ({
+        operationType: h.operationType,
+        rowCount: h.rowCount,
+        totalReported: h.totalReported,
+        urlRedacted: h.urlRedacted,
+      })),
+    ]
+    if (portalFirst.json) {
+      const fromPortal = extractConsultaDteList(portalFirst.json)
+      if (fromPortal.length > 0) {
+        prePurchases = portalFirst.json
+        purchaseList = fromPortal
+        recibidasQueryMode = "portal_ui_first"
+        recibidasDateKind = "recepcion"
+        recibidasAttempts = [{ mode: "portal_ui_first", rowCount: fromPortal.length }]
+        warnings.push(
+          "Compras (recibidas) obtenidas desde la consulta en pantalla del portal FEL antes de llamar a la API directa."
+        )
+      }
+    }
+    cp("sat.portal_ui_recibidos_first_done", `rows=${purchaseList.length}`)
+  }
 
   cp("sat.api_consulta_emitidos_start")
   const preSalesIso = await fetchFelConsultaDteMergedPages(
@@ -295,26 +357,63 @@ export async function runSatFelExtraction(opts: {
     "E",
     { dateFormat: "iso", onCheckpoint: mergeCp("E"), ...mergedBase }
   )
-  cp("sat.api_consulta_recibidos_start")
-  const recibidasBest = await fetchFelRecibidasBestEffort(
-    token,
-    cookieHeader,
-    apiUsuario,
-    qFrom,
-    qTo,
-    { dateFormat: "iso", onCheckpoint: mergeCp("R"), ...mergedBase }
-  )
-  let recibidasQueryMode = recibidasBest.winningMode
-  let recibidasDateKind: FelConsultaDateRangeKind = recibidasBest.winningMode?.startsWith("recepcion")
-    ? "recepcion"
-    : recibidasBest.winningMode?.startsWith("both")
-      ? "both"
-      : "emision"
-
   let preSales = preSalesIso
-  let prePurchases = recibidasBest.data
   let salesList = extractConsultaDteList(preSales)
-  let purchaseList = extractConsultaDteList(prePurchases)
+
+  if (purchaseList.length === 0) {
+    cp("sat.api_consulta_recibidos_start")
+    const usuariosProbados: string[] = []
+    let recibidasBest = await fetchFelRecibidasBestEffort(
+      token,
+      cookieHeader,
+      apiUsuario,
+      qFrom,
+      qTo,
+      { dateFormat: "iso", onCheckpoint: mergeCp("R"), ...mergedBase }
+    )
+    usuariosProbados.push(apiUsuario)
+    purchaseList = extractConsultaDteList(recibidasBest.data)
+    prePurchases = recibidasBest.data
+    recibidasQueryMode = recibidasBest.winningMode
+    recibidasAttempts = recibidasBest.attempts
+
+    if (purchaseList.length === 0) {
+      for (const altUsuario of usuarioCandidates) {
+        if (altUsuario === apiUsuario) continue
+        cp("sat.api_recibidos_alt_usuario", altUsuario)
+        const alt = await fetchFelRecibidasBestEffort(token, cookieHeader, altUsuario, qFrom, qTo, {
+          dateFormat: "iso",
+          onCheckpoint: mergeCp("R"),
+          ...mergedBase,
+        })
+        usuariosProbados.push(altUsuario)
+        recibidasAttempts = [...recibidasAttempts, ...alt.attempts.map((a) => ({ mode: `${altUsuario}:${a.mode}`, rowCount: a.rowCount }))]
+        const altRows = extractConsultaDteList(alt.data)
+        if (altRows.length > 0) {
+          apiUsuario = altUsuario
+          prePurchases = alt.data
+          purchaseList = altRows
+          recibidasQueryMode = alt.winningMode ? `${alt.winningMode}@${altUsuario}` : `usuario@${altUsuario}`
+          warnings.push(
+            `Las compras (R) se obtuvieron usando usuario=${altUsuario} en la API (distinto del login mostrado en perfil).`
+          )
+          break
+        }
+      }
+    }
+
+    if (!recibidasQueryMode && purchaseList.length === 0) {
+      recibidasDateKind = "emision"
+    } else if (recibidasQueryMode?.includes("recepcion")) {
+      recibidasDateKind = "recepcion"
+    } else if (recibidasQueryMode?.includes("both")) {
+      recibidasDateKind = "both"
+    } else {
+      recibidasDateKind = "emision"
+    }
+  } else {
+    cp("sat.api_consulta_recibidos_skip", "portal_first_ok")
+  }
   cp(
     "sat.extract_lists_iso",
     `emitidos_raw=${salesList.length} recibidos_raw=${purchaseList.length}`
@@ -618,7 +717,10 @@ export async function runSatFelExtraction(opts: {
     consultaTransport,
     intentosConsulta: intentosConsulta.length > 0 ? [...intentosConsulta] : undefined,
     recibidasQueryMode: recibidasQueryMode ?? undefined,
-    recibidasAttempts: recibidasBest.attempts,
+    recibidasAttempts,
+    felConsultaUsuariosProbados: usuarioCandidates,
+    felconsStorageHints,
+    portalSniffHits,
     felQueryEcho: {
       nitIdReceptorRecibidos: felNitIdReceptorQueryExplain(apiUsuario, opts.profileNit),
       fechaEmisionIni: fechaQuery.fechaEmisionIni,

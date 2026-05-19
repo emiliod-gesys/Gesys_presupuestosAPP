@@ -424,6 +424,23 @@ export function SatImportPanel({
                 <span className="font-mono">reference/moore-rpa-main</span>, login del portal):{" "}
                 <span className="font-mono text-[11px]">{diagnostics.felConsultaUsuario}</span>
               </p>
+              {diagnostics.felConsultaUsuariosProbados && diagnostics.felConsultaUsuariosProbados.length > 1 ? (
+                <p className="text-[10px] text-gray-600">
+                  Candidatos <span className="font-mono">usuario=</span> probados:{" "}
+                  <span className="font-mono">{diagnostics.felConsultaUsuariosProbados.join(" · ")}</span>
+                </p>
+              ) : null}
+              {diagnostics.portalSniffHits && diagnostics.portalSniffHits.length > 0 ? (
+                <p className="text-[10px] text-gray-600">
+                  Peticiones vistas en el navegador (felcons):{" "}
+                  <span className="font-mono">
+                    {diagnostics.portalSniffHits
+                      .slice(0, 8)
+                      .map((h) => `${h.operationType}:${h.rowCount}/${h.totalReported}`)
+                      .join(" · ")}
+                  </span>
+                </p>
+              ) : null}
               {diagnostics.felNitPerfil ? (
                 <p className="text-gray-600">
                   NIT en tu perfil (referencia): <span className="font-mono text-[11px]">{diagnostics.felNitPerfil}</span>

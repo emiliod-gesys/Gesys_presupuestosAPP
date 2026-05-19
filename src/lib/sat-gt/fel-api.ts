@@ -151,7 +151,8 @@ function felDateRangeQuery(
   const es = encodeURIComponent(s)
   const ee = encodeURIComponent(e)
   if (kind === "recepcion") {
-    return `fechaEmisionIni=&fechaEmisionFinal=&fechaRecepcionIni=${es}&fechaRecepcionFinal=${ee}`
+    /** No enviar fechaEmision vacías: el SAT puede interpretarlas como filtro inválido. */
+    return `fechaRecepcionIni=${es}&fechaRecepcionFinal=${ee}`
   }
   if (kind === "both") {
     return `fechaEmisionIni=${es}&fechaEmisionFinal=${ee}&fechaRecepcionIni=${es}&fechaRecepcionFinal=${ee}`
@@ -190,31 +191,49 @@ export function buildFelConsultaDteUrl(
 }
 
 /** GET consulta-dte desde la pestaña felcons (cookies de sesión del portal). */
+/** GET consulta-dte con URL exacta (p. ej. capturada del portal). */
+export async function fetchFelConsultaDteViaPageUrl(
+  page: Page,
+  token: string,
+  url: string
+): Promise<unknown> {
+  return fetchFelConsultaDteViaPage(page, token, url)
+}
+
 export async function fetchFelConsultaDteViaPage(page: Page, token: string, url: string): Promise<unknown> {
   const auth = token.trim()
-  return page.evaluate(
-    async (requestUrl, authorization) => {
-      const res = await fetch(requestUrl, {
-        method: "GET",
-        credentials: "include",
-        headers: {
-          Authorization: authorization,
-          Accept: "application/json, text/plain, */*",
+  const authVariants = [auth, auth.startsWith("Bearer ") ? auth : `Bearer ${auth}`]
+  let lastErr: Error | null = null
+  for (const authorization of authVariants) {
+    try {
+      return await page.evaluate(
+        async (requestUrl, authHeader) => {
+          const res = await fetch(requestUrl, {
+            method: "GET",
+            credentials: "include",
+            headers: {
+              Authorization: authHeader,
+              Accept: "application/json, text/plain, */*",
+            },
+          })
+          const text = await res.text()
+          if (!res.ok) {
+            throw new Error(`HTTP ${res.status}: ${text.slice(0, 240)}`)
+          }
+          try {
+            return JSON.parse(text) as unknown
+          } catch {
+            throw new Error(`Respuesta no JSON: ${text.slice(0, 160)}`)
+          }
         },
-      })
-      const text = await res.text()
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: ${text.slice(0, 240)}`)
-      }
-      try {
-        return JSON.parse(text) as unknown
-      } catch {
-        throw new Error(`Respuesta no JSON: ${text.slice(0, 160)}`)
-      }
-    },
-    url,
-    auth
-  )
+        url,
+        authorization
+      )
+    } catch (e) {
+      lastErr = e as Error
+    }
+  }
+  throw lastErr ?? new Error("fetch consulta-dte en navegador falló")
 }
 
 function consultaDteEstablecimientoQuery(forceZero?: boolean): string {
@@ -300,12 +319,12 @@ export async function fetchFelRecibidasBestEffort(
     forceNit: boolean
     estZero: boolean
   }> = [
+    { mode: "emision_nit_omit", dateRangeKind: "emision", forceNit: false, estZero: false },
+    { mode: "emision_nit_force", dateRangeKind: "emision", forceNit: true, estZero: false },
     { mode: "recepcion_nit_force", dateRangeKind: "recepcion", forceNit: true, estZero: false },
     { mode: "recepcion_nit_omit", dateRangeKind: "recepcion", forceNit: false, estZero: false },
     { mode: "both_nit_force", dateRangeKind: "both", forceNit: true, estZero: false },
-    { mode: "emision_nit_force", dateRangeKind: "emision", forceNit: true, estZero: false },
     { mode: "recepcion_est0_nit_force", dateRangeKind: "recepcion", forceNit: true, estZero: true },
-    { mode: "emision_nit_omit", dateRangeKind: "emision", forceNit: false, estZero: false },
   ]
 
   const attempts: FelRecibidasAttempt[] = []
