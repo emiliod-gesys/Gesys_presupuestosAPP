@@ -3,6 +3,7 @@ import JSZip from "jszip"
 import type { Page } from "puppeteer-core"
 import { parseStringPromise } from "xml2js"
 import {
+  extractConsultaDteList,
   felMessageFromResponse,
   getConsultaDtePagedSlice,
   getFelDteUuid,
@@ -21,18 +22,29 @@ export function isoDateToDdMmYyyy(iso: string): string {
 export function felConsultaDateQueryValues(
   startIso: string,
   endIso: string,
-  fmt: FelConsultaDateFormat
-): { fechaEmisionIni: string; fechaEmisionFinal: string } {
-  if (fmt === "ddmmyyyy") {
-    return { fechaEmisionIni: isoToFelDdMmYyyy(startIso), fechaEmisionFinal: isoToFelDdMmYyyy(endIso) }
+  fmt: FelConsultaDateFormat,
+  dateRangeKind: FelConsultaDateRangeKind = "emision"
+): { fechaEmisionIni: string; fechaEmisionFinal: string; fechaRecepcionIni?: string; fechaRecepcionFinal?: string } {
+  const s = fmt === "ddmmyyyy" ? isoToFelDdMmYyyy(startIso) : startIso.trim()
+  const e = fmt === "ddmmyyyy" ? isoToFelDdMmYyyy(endIso) : endIso.trim()
+  if (dateRangeKind === "recepcion") {
+    return { fechaEmisionIni: "", fechaEmisionFinal: "", fechaRecepcionIni: s, fechaRecepcionFinal: e }
   }
-  return { fechaEmisionIni: startIso.trim(), fechaEmisionFinal: endIso.trim() }
+  if (dateRangeKind === "both") {
+    return { fechaEmisionIni: s, fechaEmisionFinal: e, fechaRecepcionIni: s, fechaRecepcionFinal: e }
+  }
+  return { fechaEmisionIni: s, fechaEmisionFinal: e }
 }
 
 export type FelConsultaDateFormat = "iso" | "ddmmyyyy"
 
+/** Campo de fecha en consulta-dte; recibidas en el portal suelen usar recepción, no emisión. */
+export type FelConsultaDateRangeKind = "emision" | "recepcion" | "both"
+
 export type FelConsultaDteOpts = {
   dateFormat?: FelConsultaDateFormat
+  /** Qué parámetros de fecha enviar (solo afecta la parte de fechas en la URL). */
+  dateRangeKind?: FelConsultaDateRangeKind
   /** Paginación (portal FEL): suele ir con `tamanoPagina`. */
   pagina?: number
   tamanoPagina?: number
@@ -128,6 +140,25 @@ function felConsultaAxiosHeaders(token: string, cookieHeader: string): Record<st
   return base
 }
 
+function felDateRangeQuery(
+  startIso: string,
+  endIso: string,
+  fmt: FelConsultaDateFormat,
+  kind: FelConsultaDateRangeKind
+): string {
+  const s = fmt === "ddmmyyyy" ? isoDateToDdMmYyyy(startIso) : startIso.trim()
+  const e = fmt === "ddmmyyyy" ? isoDateToDdMmYyyy(endIso) : endIso.trim()
+  const es = encodeURIComponent(s)
+  const ee = encodeURIComponent(e)
+  if (kind === "recepcion") {
+    return `fechaEmisionIni=&fechaEmisionFinal=&fechaRecepcionIni=${es}&fechaRecepcionFinal=${ee}`
+  }
+  if (kind === "both") {
+    return `fechaEmisionIni=${es}&fechaEmisionFinal=${ee}&fechaRecepcionIni=${es}&fechaRecepcionFinal=${ee}`
+  }
+  return `fechaEmisionIni=${es}&fechaEmisionFinal=${ee}`
+}
+
 /** URL de consulta-dte (mismos parámetros que moore-rpa). */
 export function buildFelConsultaDteUrl(
   user: string,
@@ -137,8 +168,7 @@ export function buildFelConsultaDteUrl(
   opts?: FelConsultaDteOpts
 ): string {
   const fmt = opts?.dateFormat ?? "iso"
-  const s = fmt === "ddmmyyyy" ? isoDateToDdMmYyyy(startDate) : startDate
-  const e = fmt === "ddmmyyyy" ? isoDateToDdMmYyyy(endDate) : endDate
+  const dateKind = opts?.dateRangeKind ?? "emision"
   const nitReceptor = felNitIdReceptorQueryParam(
     operationType,
     user,
@@ -146,9 +176,10 @@ export function buildFelConsultaDteUrl(
     opts?.forceNitIdReceptorWhenSameUsuario === true
   )
   const est = consultaDteEstablecimientoQuery(opts?.consultaEstablecimientoForceZero === true)
+  const dateQs = felDateRangeQuery(startDate, endDate, fmt, dateKind)
   let url =
     `https://felcons.c.sat.gob.gt/dte-agencia-virtual/api/consulta-dte?usuario=${encodeURIComponent(user)}` +
-    `&tipoOperacion=${operationType}&establecimiento=${est}&tipoDte=&noAutorizacion=&nitIdReceptor=${nitReceptor}&estadoDte=&serie=&numero=&moneda=&montoTotalRangoIni=&montoTotalRangoFinal=&impuesto=&nitCertificador=&resultado=&fechaEmisionIni=${encodeURIComponent(s)}&fechaEmisionFinal=${encodeURIComponent(e)}`
+    `&tipoOperacion=${operationType}&establecimiento=${est}&tipoDte=&noAutorizacion=&nitIdReceptor=${nitReceptor}&estadoDte=&serie=&numero=&moneda=&montoTotalRangoIni=&montoTotalRangoFinal=&impuesto=&nitCertificador=&resultado=&${dateQs}`
   if (opts?.pagina != null && opts.pagina > 0) {
     url += `&pagina=${encodeURIComponent(String(opts.pagina))}`
   }
@@ -239,6 +270,7 @@ export async function fetchFelConsultaDte(
  */
 export type FelConsultaDteMergedOpts = {
   dateFormat?: FelConsultaDateFormat
+  dateRangeKind?: FelConsultaDateRangeKind
   /** Trazas internas (fusión de páginas); no incluir datos sensibles en `detail`. */
   onCheckpoint?: (stage: string, detail?: string) => void
   nitReceptorQueryValue?: string
@@ -246,6 +278,58 @@ export type FelConsultaDteMergedOpts = {
   consultaEstablecimientoForceZero?: boolean
   /** Página en felcons tras login; prioriza fetch() del navegador (misma sesión que el portal). */
   felconsPage?: Page | null
+}
+
+export type FelRecibidasAttempt = {
+  mode: string
+  rowCount: number
+}
+
+/** Variantes de consulta R (recibidas): recepción vs emisión y nitIdReceptor. */
+export async function fetchFelRecibidasBestEffort(
+  token: string,
+  cookieHeader: string,
+  user: string,
+  startDate: string,
+  endDate: string,
+  opts?: FelConsultaDteMergedOpts
+): Promise<{ data: unknown; winningMode: string | null; attempts: FelRecibidasAttempt[] }> {
+  const plan: Array<{
+    mode: string
+    dateRangeKind: FelConsultaDateRangeKind
+    forceNit: boolean
+    estZero: boolean
+  }> = [
+    { mode: "recepcion_nit_force", dateRangeKind: "recepcion", forceNit: true, estZero: false },
+    { mode: "recepcion_nit_omit", dateRangeKind: "recepcion", forceNit: false, estZero: false },
+    { mode: "both_nit_force", dateRangeKind: "both", forceNit: true, estZero: false },
+    { mode: "emision_nit_force", dateRangeKind: "emision", forceNit: true, estZero: false },
+    { mode: "recepcion_est0_nit_force", dateRangeKind: "recepcion", forceNit: true, estZero: true },
+    { mode: "emision_nit_omit", dateRangeKind: "emision", forceNit: false, estZero: false },
+  ]
+
+  const attempts: FelRecibidasAttempt[] = []
+  let lastData: unknown = {}
+
+  for (const step of plan) {
+    const data = await fetchFelConsultaDteMergedPages(token, cookieHeader, user, startDate, endDate, "R", {
+      ...opts,
+      dateFormat: opts?.dateFormat ?? "iso",
+      dateRangeKind: step.dateRangeKind,
+      forceNitIdReceptorWhenSameUsuario: step.forceNit,
+      consultaEstablecimientoForceZero: step.estZero,
+      onCheckpoint: (stage, detail) =>
+        opts?.onCheckpoint?.(`r_${step.mode}.${stage}`, detail),
+    })
+    const rowCount = extractConsultaDteList(data).length
+    attempts.push({ mode: step.mode, rowCount })
+    lastData = data
+    if (rowCount > 0) {
+      return { data, winningMode: step.mode, attempts }
+    }
+  }
+
+  return { data: lastData, winningMode: null, attempts }
 }
 
 export async function fetchFelConsultaDteMergedPages(
@@ -265,6 +349,7 @@ export async function fetchFelConsultaDteMergedPages(
   async function one(extra: FelConsultaDteOpts): Promise<unknown> {
     const reqOpts: FelConsultaDteOpts = {
       dateFormat: fmt,
+      ...(opts?.dateRangeKind ? { dateRangeKind: opts.dateRangeKind } : {}),
       ...(nitRv ? { nitReceptorQueryValue: nitRv } : {}),
       ...(opts?.forceNitIdReceptorWhenSameUsuario === true
         ? { forceNitIdReceptorWhenSameUsuario: true }

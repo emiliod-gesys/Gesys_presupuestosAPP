@@ -5,10 +5,13 @@ import {
   felIdsEquivalentUsuarioNit,
   felNitIdReceptorQueryExplain,
   fetchFelConsultaDteMergedPages,
+  fetchFelRecibidasBestEffort,
   fetchFelZipXmlLines,
   type FelConsultaDateFormat,
+  type FelConsultaDateRangeKind,
   type FelXmlConverted,
 } from "./fel-api"
+import { captureConsultaDteViaPortalUi } from "./fel-portal-consulta"
 import {
   countNormalizedRows,
   describeFelResponseShape,
@@ -293,18 +296,23 @@ export async function runSatFelExtraction(opts: {
     { dateFormat: "iso", onCheckpoint: mergeCp("E"), ...mergedBase }
   )
   cp("sat.api_consulta_recibidos_start")
-  const prePurchasesIso = await fetchFelConsultaDteMergedPages(
+  const recibidasBest = await fetchFelRecibidasBestEffort(
     token,
     cookieHeader,
     apiUsuario,
     qFrom,
     qTo,
-    "R",
     { dateFormat: "iso", onCheckpoint: mergeCp("R"), ...mergedBase }
   )
+  let recibidasQueryMode = recibidasBest.winningMode
+  let recibidasDateKind: FelConsultaDateRangeKind = recibidasBest.winningMode?.startsWith("recepcion")
+    ? "recepcion"
+    : recibidasBest.winningMode?.startsWith("both")
+      ? "both"
+      : "emision"
 
   let preSales = preSalesIso
-  let prePurchases = prePurchasesIso
+  let prePurchases = recibidasBest.data
   let salesList = extractConsultaDteList(preSales)
   let purchaseList = extractConsultaDteList(prePurchases)
   cp(
@@ -337,27 +345,20 @@ export async function runSatFelExtraction(opts: {
         consultaEstablecimientoForceZero: true,
       }
     )
-    const prePurchasesZ = await fetchFelConsultaDteMergedPages(
-      token,
-      cookieHeader,
-      apiUsuario,
-      qFrom,
-      qTo,
-      "R",
-      {
-        dateFormat: "iso",
-        onCheckpoint: mergeCp("R"),
-        ...mergedBase,
-        consultaEstablecimientoForceZero: true,
-      }
-    )
+    const recibidasZ = await fetchFelRecibidasBestEffort(token, cookieHeader, apiUsuario, qFrom, qTo, {
+      dateFormat: "iso",
+      onCheckpoint: mergeCp("R"),
+      ...mergedBase,
+      consultaEstablecimientoForceZero: true,
+    })
     const sZ = extractConsultaDteList(preSalesZ)
-    const pZ = extractConsultaDteList(prePurchasesZ)
+    const pZ = extractConsultaDteList(recibidasZ.data)
     if (sZ.length + pZ.length > 0) {
       preSales = preSalesZ
-      prePurchases = prePurchasesZ
+      prePurchases = recibidasZ.data
       salesList = sZ
       purchaseList = pZ
+      if (recibidasZ.winningMode) recibidasQueryMode = recibidasZ.winningMode
       consultaReintentos.push("establecimiento_zero")
       warnings.push(
         "Reintento con establecimiento=0 en consulta-dte devolvió filas. Si no lo necesitas en producción, define SAT_FEL_DISABLE_AUTO_RETRY=1."
@@ -419,15 +420,12 @@ export async function runSatFelExtraction(opts: {
       "E",
       { dateFormat: "ddmmyyyy", onCheckpoint: mergeCp("E"), ...mergedBase }
     )
-    const prePurchasesDd = await fetchFelConsultaDteMergedPages(
-      token,
-      cookieHeader,
-      apiUsuario,
-      qFrom,
-      qTo,
-      "R",
-      { dateFormat: "ddmmyyyy", onCheckpoint: mergeCp("R"), ...mergedBase }
-    )
+    const recibidasDd = await fetchFelRecibidasBestEffort(token, cookieHeader, apiUsuario, qFrom, qTo, {
+      dateFormat: "ddmmyyyy",
+      onCheckpoint: mergeCp("R"),
+      ...mergedBase,
+    })
+    const prePurchasesDd = recibidasDd.data
     const codeE = felMessageFromResponse(preSalesDd).codigo
     const codeR = felMessageFromResponse(prePurchasesDd).codigo
     const salesDd = extractConsultaDteList(preSalesDd)
@@ -443,6 +441,7 @@ export async function runSatFelExtraction(opts: {
       prePurchases = prePurchasesDd
       salesList = salesDd
       purchaseList = purchaseDd
+      if (recibidasDd.winningMode) recibidasQueryMode = recibidasDd.winningMode
       cp("sat.retry_ddmm_ok", `emitidos_raw=${salesList.length} recibidos_raw=${purchaseList.length}`)
       warnings.push(
         "El SAT devolvió filas usando fechas dd/MM/yyyy en la URL (no ISO). El rango en pantalla sigue siendo el mismo calendario."
@@ -450,6 +449,27 @@ export async function runSatFelExtraction(opts: {
     } else {
       cp("sat.retry_ddmm_skip", "sin filas o error cliente en reintento dd/MM")
     }
+  }
+
+  if (purchaseList.length === 0 && felconsPage && process.env.SAT_FEL_DISABLE_PORTAL_UI !== "1") {
+    cp("sat.portal_ui_recibidos_start")
+    intentosConsulta.push("portal_ui_r")
+    const portalR = await captureConsultaDteViaPortalUi(felconsPage, "R", qFrom, qTo, (stage, detail) =>
+      cp(`sat.portal_ui_r.${stage}`, detail)
+    )
+    if (portalR) {
+      const fromPortal = extractConsultaDteList(portalR)
+      if (fromPortal.length > 0) {
+        prePurchases = portalR
+        purchaseList = fromPortal
+        recibidasQueryMode = "portal_ui"
+        recibidasDateKind = "recepcion"
+        warnings.push(
+          "Las compras (recibidas) se obtuvieron disparando la consulta en la pantalla del portal FEL (no solo por URL de API)."
+        )
+      }
+    }
+    cp("sat.portal_ui_recibidos_done", `rows=${purchaseList.length}`)
   }
 
   const msgE = felMessageFromResponse(preSales)
@@ -581,7 +601,7 @@ export async function runSatFelExtraction(opts: {
   }
 
   cp("sat.run_complete", `rows=${rows.length}`)
-  const fechaQuery = felConsultaDateQueryValues(qFrom, qTo, dateFormatUsed)
+  const fechaQuery = felConsultaDateQueryValues(qFrom, qTo, dateFormatUsed, recibidasDateKind)
   const diagnostics: SatFelRunDiagnostics = {
     felConsultaUsuario: apiUsuario,
     felNitPerfil: opts.profileNit?.trim() || null,
@@ -597,10 +617,18 @@ export async function runSatFelExtraction(opts: {
     },
     consultaTransport,
     intentosConsulta: intentosConsulta.length > 0 ? [...intentosConsulta] : undefined,
+    recibidasQueryMode: recibidasQueryMode ?? undefined,
+    recibidasAttempts: recibidasBest.attempts,
     felQueryEcho: {
       nitIdReceptorRecibidos: felNitIdReceptorQueryExplain(apiUsuario, opts.profileNit),
       fechaEmisionIni: fechaQuery.fechaEmisionIni,
       fechaEmisionFinal: fechaQuery.fechaEmisionFinal,
+      ...(fechaQuery.fechaRecepcionIni
+        ? {
+            fechaRecepcionIni: fechaQuery.fechaRecepcionIni,
+            fechaRecepcionFinal: fechaQuery.fechaRecepcionFinal,
+          }
+        : {}),
       establecimientoConsulta: felConsultaEstablecimientoExplain(),
       ...(consultaReintentos.length > 0 ? { reintentosConsulta: [...consultaReintentos] } : {}),
       ...(forceNitSameForRZip ? { recibidosNitIdReceptorForzado: true } : {}),

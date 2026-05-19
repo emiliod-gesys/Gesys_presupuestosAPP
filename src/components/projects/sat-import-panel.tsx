@@ -446,6 +446,22 @@ export function SatImportPanel({
                   Intentos automáticos: <span className="font-mono">{diagnostics.intentosConsulta.join(", ")}</span>
                 </p>
               ) : null}
+              {diagnostics.recibidasQueryMode ? (
+                <p className="text-xs text-emerald-900 bg-emerald-50/90 rounded-md border border-emerald-100 px-2 py-1.5">
+                  Compras (R) con datos vía modo:{" "}
+                  <span className="font-mono">{diagnostics.recibidasQueryMode}</span>
+                  {diagnostics.recibidasQueryMode.includes("recepcion") ? " (fechas de recepción en la URL)" : null}
+                  {diagnostics.recibidasQueryMode === "portal_ui" ? " (consulta disparada en la pantalla FEL)" : null}
+                </p>
+              ) : null}
+              {diagnostics.recibidasAttempts && diagnostics.recibidasAttempts.length > 0 ? (
+                <p className="text-[10px] text-gray-600">
+                  Variantes R probadas (filas):{" "}
+                  <span className="font-mono">
+                    {diagnostics.recibidasAttempts.map((a) => `${a.mode}=${a.rowCount}`).join(" · ")}
+                  </span>
+                </p>
+              ) : null}
               <p className="text-gray-600">
                 En compras (<span className="font-mono">R</span>), <span className="font-mono">nitIdReceptor</span> se
                 rellena con el NIT del perfil <strong>solo si es distinto</strong> del valor de{" "}
@@ -500,13 +516,47 @@ export function SatImportPanel({
                 </div>
               )}
               {diagnostics.felQueryEcho &&
-                (diagnostics.felQueryEcho.fechaEmisionIni || diagnostics.felQueryEcho.fechaEmisionFinal) && (
+                (diagnostics.felQueryEcho.fechaEmisionIni ||
+                  diagnostics.felQueryEcho.fechaEmisionFinal ||
+                  diagnostics.felQueryEcho.fechaRecepcionIni) && (
                   <p className="text-gray-600">
-                    Fechas en la URL del SAT: <span className="font-mono">fechaEmisionIni=</span>
-                    <span className="font-mono text-[11px]">{diagnostics.felQueryEcho.fechaEmisionIni ?? "—"}</span>
-                    {" · "}
-                    <span className="font-mono">fechaEmisionFinal=</span>
-                    <span className="font-mono text-[11px]">{diagnostics.felQueryEcho.fechaEmisionFinal ?? "—"}</span>
+                    Fechas en la URL del SAT (última consulta R efectiva):{" "}
+                    {diagnostics.felQueryEcho.fechaRecepcionIni ? (
+                      <>
+                        <span className="font-mono">fechaRecepcionIni=</span>
+                        <span className="font-mono text-[11px]">
+                          {diagnostics.felQueryEcho.fechaRecepcionIni}
+                        </span>
+                        {" · "}
+                        <span className="font-mono">fechaRecepcionFinal=</span>
+                        <span className="font-mono text-[11px]">
+                          {diagnostics.felQueryEcho.fechaRecepcionFinal ?? "—"}
+                        </span>
+                        {(diagnostics.felQueryEcho.fechaEmisionIni ||
+                          diagnostics.felQueryEcho.fechaEmisionFinal) && (
+                          <>
+                            {" "}
+                            · emisión:{" "}
+                            <span className="font-mono text-[11px]">
+                              {diagnostics.felQueryEcho.fechaEmisionIni || "—"} →{" "}
+                              {diagnostics.felQueryEcho.fechaEmisionFinal || "—"}
+                            </span>
+                          </>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <span className="font-mono">fechaEmisionIni=</span>
+                        <span className="font-mono text-[11px]">
+                          {diagnostics.felQueryEcho.fechaEmisionIni ?? "—"}
+                        </span>
+                        {" · "}
+                        <span className="font-mono">fechaEmisionFinal=</span>
+                        <span className="font-mono text-[11px]">
+                          {diagnostics.felQueryEcho.fechaEmisionFinal ?? "—"}
+                        </span>
+                      </>
+                    )}
                   </p>
                 )}
               {diagnostics.felQueryEcho && (
@@ -602,10 +652,16 @@ export function SatImportPanel({
                 <p className="font-medium text-indigo-950">Si en el portal FEL ves compras (recibidas) y aquí no</p>
                 <ol className="mt-1.5 list-decimal list-inside space-y-1 text-[11px] text-gray-700">
                   <li>
-                    Si entras al SAT con el <strong>mismo NIT</strong> que tienes en perfil, la consulta R deja{" "}
-                    <span className="font-mono">nitIdReceptor</span> vacío (como moore-rpa); duplicar el NIT en ambos
-                    parámetros a veces vacía la respuesta. Si tu login es <strong>correo</strong> y el NIT del receptor está
-                    en perfil, sí enviamos <span className="font-mono">nitIdReceptor</span>.
+                    Para <strong>compras</strong>, el servidor prueba primero{" "}
+                    <span className="font-mono">fechaRecepcionIni/Final</span> (como la pestaña Recibidas del portal), luego
+                    emisión y otras variantes de <span className="font-mono">nitIdReceptor</span>. Mira en el diagnóstico
+                    «Variantes R probadas» y el modo ganador.
+                  </li>
+                  <li>
+                    Si entras al SAT con el <strong>mismo NIT</strong> que tienes en perfil, muchas variantes dejan{" "}
+                    <span className="font-mono">nitIdReceptor</span> vacío; otras lo envían aunque coincida (reintento). Si
+                    tu login es <strong>correo</strong> y el NIT del receptor está en perfil, también se prueba con NIT en la
+                    URL.
                   </li>
                   <li>
                     Si necesitas comportamiento idéntico a moore-rpa (sin <span className="font-mono">nitIdReceptor</span>

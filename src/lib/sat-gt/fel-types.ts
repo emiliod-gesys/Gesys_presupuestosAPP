@@ -66,6 +66,10 @@ export interface SatFelRunDiagnostics {
   consultaTransport?: "browser" | "axios" | "mixed"
   /** Estrategias de reintento ejecutadas (p. ej. establecimiento_zero, fechas_ddmm). */
   intentosConsulta?: string[]
+  /** Modo que devolvió filas en compras (R), si hubo alguno. */
+  recibidasQueryMode?: string | null
+  /** Resumen de variantes R probadas (recepción vs emisión, nit, etc.). */
+  recibidasAttempts?: { mode: string; rowCount: number }[]
   /**
    * Rango solicitado vs rango efectivo en las peticiones al SAT.
    * Si «hasta» o «desde» son futuras en UTC, el scraper acota por defecto (salvo SAT_FEL_DISABLE_DATE_CLAMP=1).
@@ -88,6 +92,8 @@ export interface SatFelRunDiagnostics {
     /** Valores enviados en fechaEmisionIni / fechaEmisionFinal (último formato que funcionó). */
     fechaEmisionIni?: string
     fechaEmisionFinal?: string
+    fechaRecepcionIni?: string
+    fechaRecepcionFinal?: string
     /** `vacio` (moore por defecto), `0` (SAT_FEL_CONSULTA_ESTABLECIMIENTO_ZERO=1), `custom` (SAT_FEL_ESTABLECIMIENTO_CONSULTA). */
     establecimientoConsulta: string
     /** Reintentos de consulta-dte por variables de entorno (p. ej. `establecimiento_zero`). */
