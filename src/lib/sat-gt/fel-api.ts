@@ -9,11 +9,23 @@ import {
   unwrapFelConsultaResponse,
 } from "./fel-rows"
 
+import { isoToFelDdMmYyyy } from "./dates"
+
 /** Algunas despliegues del SAT esperan dd/MM/yyyy en el query en lugar de ISO. */
 export function isoDateToDdMmYyyy(iso: string): string {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso.trim())
-  if (!m) return iso.trim()
-  return `${m[3]}/${m[2]}/${m[1]}`
+  return isoToFelDdMmYyyy(iso)
+}
+
+/** Valores de fechaEmisionIni/Final tal como van en la URL (sin token). */
+export function felConsultaDateQueryValues(
+  startIso: string,
+  endIso: string,
+  fmt: FelConsultaDateFormat
+): { fechaEmisionIni: string; fechaEmisionFinal: string } {
+  if (fmt === "ddmmyyyy") {
+    return { fechaEmisionIni: isoToFelDdMmYyyy(startIso), fechaEmisionFinal: isoToFelDdMmYyyy(endIso) }
+  }
+  return { fechaEmisionIni: startIso.trim(), fechaEmisionFinal: endIso.trim() }
 }
 
 export type FelConsultaDateFormat = "iso" | "ddmmyyyy"

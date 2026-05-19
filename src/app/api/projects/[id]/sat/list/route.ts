@@ -1,6 +1,7 @@
 import { cookies } from "next/headers"
 import { createServerClient } from "@supabase/ssr"
 import { NextResponse } from "next/server"
+import { parseDdMmYyyyToIso } from "@/lib/sat-gt/dates"
 import { runSatFelExtraction, formatSatFelUserError } from "@/lib/sat-gt/fel-scraper"
 import { normalizeGtNit } from "@/lib/sat-gt/nit"
 
@@ -50,11 +51,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ message: "JSON inválido" }, { status: 400 })
   }
 
-  const dateFrom = typeof body.dateFrom === "string" ? body.dateFrom.trim() : ""
-  const dateTo = typeof body.dateTo === "string" ? body.dateTo.trim() : ""
-  if (!dateFrom || !dateTo || !/^\d{4}-\d{2}-\d{2}$/.test(dateFrom) || !/^\d{4}-\d{2}-\d{2}$/.test(dateTo)) {
+  const rawFrom = typeof body.dateFrom === "string" ? body.dateFrom.trim() : ""
+  const rawTo = typeof body.dateTo === "string" ? body.dateTo.trim() : ""
+  const dateFrom = parseDdMmYyyyToIso(rawFrom) ?? (rawFrom.match(/^\d{4}-\d{2}-\d{2}$/) ? rawFrom : "")
+  const dateTo = parseDdMmYyyyToIso(rawTo) ?? (rawTo.match(/^\d{4}-\d{2}-\d{2}$/) ? rawTo : "")
+  if (!dateFrom || !dateTo) {
     return NextResponse.json(
-      { message: "Indica rango de fechas válido (desde y hasta, formato YYYY-MM-DD)." },
+      { message: "Indica rango válido: dd/mm/aaaa (día/mes/año) o YYYY-MM-DD en desde y hasta." },
       { status: 400 }
     )
   }

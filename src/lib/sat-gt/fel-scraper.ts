@@ -1,5 +1,6 @@
 import type { Browser, Page } from "puppeteer-core"
 import {
+  felConsultaDateQueryValues,
   felConsultaEstablecimientoExplain,
   felIdsEquivalentUsuarioNit,
   felNitIdReceptorQueryExplain,
@@ -298,11 +299,12 @@ export async function runSatFelExtraction(opts: {
 
   let forceNitSameForRZip = false
   const consultaReintentos: string[] = []
+  const autoRetryOnEmpty = process.env.SAT_FEL_DISABLE_AUTO_RETRY !== "1"
+  const bothListsEmpty = () => salesList.length === 0 && purchaseList.length === 0
 
   if (
-    salesList.length === 0 &&
-    purchaseList.length === 0 &&
-    process.env.SAT_FEL_EMPTY_RETRY_ESTABLECIMIENTO_ZERO === "1"
+    bothListsEmpty() &&
+    (autoRetryOnEmpty || process.env.SAT_FEL_EMPTY_RETRY_ESTABLECIMIENTO_ZERO === "1")
   ) {
     cp("sat.retry_empty_establecimiento_zero")
     const preSalesZ = await fetchFelConsultaDteMergedPages(
@@ -342,7 +344,7 @@ export async function runSatFelExtraction(opts: {
       purchaseList = pZ
       consultaReintentos.push("establecimiento_zero")
       warnings.push(
-        "SAT_FEL_EMPTY_RETRY_ESTABLECIMIENTO_ZERO=1: segunda pasada de consulta-dte con establecimiento=0 devolvió filas. Comprueba en el portal FEL y quita la variable si no la necesitas."
+        "Reintento con establecimiento=0 en consulta-dte devolvió filas. Si no lo necesitas en producción, define SAT_FEL_DISABLE_AUTO_RETRY=1."
       )
     } else {
       cp("sat.retry_empty_establecimiento_zero_skip", "sin_filas")
@@ -351,7 +353,7 @@ export async function runSatFelExtraction(opts: {
 
   if (
     purchaseList.length === 0 &&
-    process.env.SAT_FEL_EMPTY_RETRY_R_DUPLICATE_NIT === "1" &&
+    (autoRetryOnEmpty || process.env.SAT_FEL_EMPTY_RETRY_R_DUPLICATE_NIT === "1") &&
     nitForReceptor &&
     felIdsEquivalentUsuarioNit(apiUsuario, nitForReceptor)
   ) {
@@ -377,7 +379,7 @@ export async function runSatFelExtraction(opts: {
       consultaReintentos.push("r_nit_dup")
       forceNitSameForRZip = true
       warnings.push(
-        "SAT_FEL_EMPTY_RETRY_R_DUPLICATE_NIT=1: segunda consulta R con nitIdReceptor igual al login devolvió filas. El SAT puede comportarse distinto según contribuyente."
+        "Reintento de compras (R) con nitIdReceptor igual al login devolvió filas. El SAT a veces exige ese parámetro aunque coincida con usuario=."
       )
     } else {
       cp("sat.retry_empty_r_duplicate_nit_skip", "sin_filas")
@@ -385,9 +387,9 @@ export async function runSatFelExtraction(opts: {
   }
 
   if (
-    process.env.SAT_FEL_TRY_DDMM === "1" &&
-    salesList.length === 0 &&
-    purchaseList.length === 0
+    bothListsEmpty() &&
+    dateFormatUsed === "iso" &&
+    (autoRetryOnEmpty || process.env.SAT_FEL_TRY_DDMM === "1")
   ) {
     cp("sat.retry_ddmm_start")
     const preSalesDd = await fetchFelConsultaDteMergedPages(
@@ -425,7 +427,7 @@ export async function runSatFelExtraction(opts: {
       purchaseList = purchaseDd
       cp("sat.retry_ddmm_ok", `emitidos_raw=${salesList.length} recibidos_raw=${purchaseList.length}`)
       warnings.push(
-        "SAT_FEL_TRY_DDMM=1: se usaron fechas dd/MM/yyyy en la URL y hubo filas. Si no lo necesitas, quita la variable de entorno."
+        "El SAT devolvió filas usando fechas dd/MM/yyyy en la URL (no ISO). El rango en pantalla sigue siendo el mismo calendario."
       )
     } else {
       cp("sat.retry_ddmm_skip", "sin filas o error cliente en reintento dd/MM")
@@ -561,6 +563,7 @@ export async function runSatFelExtraction(opts: {
   }
 
   cp("sat.run_complete", `rows=${rows.length}`)
+  const fechaQuery = felConsultaDateQueryValues(qFrom, qTo, dateFormatUsed)
   const diagnostics: SatFelRunDiagnostics = {
     felConsultaUsuario: apiUsuario,
     felNitPerfil: opts.profileNit?.trim() || null,
@@ -576,6 +579,8 @@ export async function runSatFelExtraction(opts: {
     },
     felQueryEcho: {
       nitIdReceptorRecibidos: felNitIdReceptorQueryExplain(apiUsuario, opts.profileNit),
+      fechaEmisionIni: fechaQuery.fechaEmisionIni,
+      fechaEmisionFinal: fechaQuery.fechaEmisionFinal,
       establecimientoConsulta: felConsultaEstablecimientoExplain(),
       ...(consultaReintentos.length > 0 ? { reintentosConsulta: [...consultaReintentos] } : {}),
       ...(forceNitSameForRZip ? { recibidosNitIdReceptorForzado: true } : {}),

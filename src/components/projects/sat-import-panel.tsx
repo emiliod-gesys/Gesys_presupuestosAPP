@@ -10,18 +10,15 @@ import { Select } from "@/components/ui/select"
 import { useToast } from "@/components/ui/toast"
 import { formatCurrency, cn } from "@/lib/utils"
 import type { SatDteListRow, SatFelCheckpoint, SatFelRunDiagnostics } from "@/lib/sat-gt/fel-types"
+import {
+  defaultSatDateRangeIso,
+  isoToDdMmYyyyDisplay,
+  parseDdMmYyyyToIso,
+  parseIsoDateYmd,
+} from "@/lib/sat-gt/dates"
 import { Download, FileSpreadsheet } from "lucide-react"
 
 type Opt = { value: string; label: string }
-
-function defaultSatDateRange() {
-  const today = new Date()
-  const start = new Date(today.getFullYear(), today.getMonth(), 1)
-  return {
-    from: start.toISOString().slice(0, 10),
-    to: today.toISOString().slice(0, 10),
-  }
-}
 
 /** Eco legible (es-GT) a partir de YYYY-MM-DD para evitar confusión con día/mes en el picker. */
 function formatIsoDateEsGT(iso: string): string | null {
@@ -58,11 +55,47 @@ export function SatImportPanel({
 }) {
   const { toast } = useToast()
   const router = useRouter()
-  const range0 = useMemo(() => defaultSatDateRange(), [])
+  const range0 = useMemo(() => defaultSatDateRangeIso(), [])
   /** Hoy en UTC por comparación de cadenas YYYY-MM-DD; se recalcula en cada render (evita quedar «congelado» tras medianoche). */
   const utcTodayIso = new Date().toISOString().slice(0, 10)
   const [dateFrom, setDateFrom] = useState(range0.from)
   const [dateTo, setDateTo] = useState(range0.to)
+  const [fromDisplay, setFromDisplay] = useState(() => isoToDdMmYyyyDisplay(range0.from))
+  const [toDisplay, setToDisplay] = useState(() => isoToDdMmYyyyDisplay(range0.to))
+  const [fromDateError, setFromDateError] = useState<string | undefined>()
+  const [toDateError, setToDateError] = useState<string | undefined>()
+
+  const commitFromDisplay = (raw: string) => {
+    setFromDisplay(raw)
+    const t = raw.trim()
+    if (!t) {
+      setFromDateError(undefined)
+      return
+    }
+    const iso = parseDdMmYyyyToIso(t)
+    if (!iso) {
+      setFromDateError("Usa día/mes/año: dd/mm/aaaa (ej. 02/04/2026 = 2 de abril)")
+      return
+    }
+    setFromDateError(undefined)
+    setDateFrom(iso)
+  }
+
+  const commitToDisplay = (raw: string) => {
+    setToDisplay(raw)
+    const t = raw.trim()
+    if (!t) {
+      setToDateError(undefined)
+      return
+    }
+    const iso = parseDdMmYyyyToIso(t)
+    if (!iso) {
+      setToDateError("Usa día/mes/año: dd/mm/aaaa (ej. 19/05/2026 = 19 de mayo)")
+      return
+    }
+    setToDateError(undefined)
+    setDateTo(iso)
+  }
   const [rows, setRows] = useState<SatDteListRow[]>([])
   const [warnings, setWarnings] = useState<string[]>([])
   const [diagnostics, setDiagnostics] = useState<SatFelRunDiagnostics | null>(null)
@@ -80,7 +113,13 @@ export function SatImportPanel({
 
   const rowKey = (r: SatDteListRow) => `${r.flow}:${r.uuid}`
 
-  const filtersReady = dateFrom.trim() !== "" && dateTo.trim() !== ""
+  const filtersReady =
+    dateFrom.trim() !== "" &&
+    dateTo.trim() !== "" &&
+    parseIsoDateYmd(dateFrom) != null &&
+    parseIsoDateYmd(dateTo) != null &&
+    !fromDateError &&
+    !toDateError
   const dateToAfterUtcToday = filtersReady && dateTo > utcTodayIso
 
   const loadFromSat = async () => {
@@ -241,20 +280,40 @@ export function SatImportPanel({
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-2">
-            <Input label="Desde" type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-            <Input label="Hasta" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+            <Input
+              label="Desde (día/mes/año)"
+              type="text"
+              inputMode="numeric"
+              autoComplete="off"
+              placeholder="dd/mm/aaaa"
+              value={fromDisplay}
+              onChange={(e) => commitFromDisplay(e.target.value)}
+              onBlur={(e) => commitFromDisplay(e.target.value)}
+              error={fromDateError}
+              helperText={dateFrom && !fromDateError ? `Enviado al SAT como ${dateFrom}` : "Ej. 02/04/2026 = 2 de abril"}
+            />
+            <Input
+              label="Hasta (día/mes/año)"
+              type="text"
+              inputMode="numeric"
+              autoComplete="off"
+              placeholder="dd/mm/aaaa"
+              value={toDisplay}
+              onChange={(e) => commitToDisplay(e.target.value)}
+              onBlur={(e) => commitToDisplay(e.target.value)}
+              error={toDateError}
+              helperText={dateTo && !toDateError ? `Enviado al SAT como ${dateTo}` : "Ej. 19/05/2026 = 19 de mayo"}
+            />
           </div>
           <p className="text-xs text-gray-600">
-            Rango que se envía al SAT (orden calendario ISO, <strong>año-mes-día</strong>):{" "}
-            <span className="font-mono text-[11px]">{dateFrom || "—"}</span> →{" "}
-            <span className="font-mono text-[11px]">{dateTo || "—"}</span>. El control de fecha del navegador puede verse
-            distinto según idioma, pero el valor interno es siempre <strong>YYYY-MM-DD</strong> (el primer número es el{" "}
-            <strong>año</strong>, no el día).
+            Orden <strong>día / mes / año</strong> (Guatemala), no mes/día como en EE.UU. Conversión interna{" "}
+            <strong>YYYY-MM-DD</strong>: <span className="font-mono text-[11px]">{dateFrom || "—"}</span> →{" "}
+            <span className="font-mono text-[11px]">{dateTo || "—"}</span>.
           </p>
           {rangoLegibleGt && (
             <p className="text-xs text-gray-700 rounded-md border border-gray-200 bg-gray-50/90 px-3 py-2">
-              Mismo rango en español (referencia): <span className="font-medium text-gray-900">{rangoLegibleGt}</span>.
-              Si esperabas otras fechas (p. ej. 4 de enero y no 1 de abril), revisa el rango ISO de arriba.
+              Calendario: <span className="font-medium text-gray-900">{rangoLegibleGt}</span>. Si buscabas 4 de febrero,
+              escribe <span className="font-mono">04/02/2026</span> (día 4, mes 2), no confundir con abril.
             </p>
           )}
           {dateToAfterUtcToday && (
@@ -269,10 +328,10 @@ export function SatImportPanel({
             En Vercel/AWS Lambda se usa Chromium empaquetado (@sparticuz/chromium). En tu PC:{" "}
             <code className="text-[11px]">npx puppeteer browsers install chrome</code> si falla el navegador. Opcional:{" "}
             <code className="text-[11px]">SAT_PUPPETEER_HEADLESS=false</code>,{" "}
-            <code className="text-[11px]">SAT_PACKAGED_CHROMIUM=1</code>. La API FEL usa fechas{" "}
-            <strong>YYYY-MM-DD</strong> salvo que definas{" "}
-            <code className="text-[11px]">SAT_FEL_TRY_DDMM=1</code> en el servidor (casi siempre el SAT devuelve error con
-            dd/MM en la URL). La consulta DTE usa el mismo <span className="font-mono">usuario=</span> que el login del
+            <code className="text-[11px]">SAT_PACKAGED_CHROMIUM=1</code>. Si la primera consulta devuelve total 0, el
+            servidor reintenta automáticamente (otro formato de fecha, establecimiento=0, etc.; desactivar con{" "}
+            <code className="text-[11px]">SAT_FEL_DISABLE_AUTO_RETRY=1</code>). La consulta DTE usa el mismo{" "}
+            <span className="font-mono">usuario=</span> que el login del
             portal (criterio <span className="font-mono">reference/moore-rpa-main</span>), no el NIT por defecto.
           </p>
         </CardContent>
@@ -429,6 +488,16 @@ export function SatImportPanel({
                   )}
                 </div>
               )}
+              {diagnostics.felQueryEcho &&
+                (diagnostics.felQueryEcho.fechaEmisionIni || diagnostics.felQueryEcho.fechaEmisionFinal) && (
+                  <p className="text-gray-600">
+                    Fechas en la URL del SAT: <span className="font-mono">fechaEmisionIni=</span>
+                    <span className="font-mono text-[11px]">{diagnostics.felQueryEcho.fechaEmisionIni ?? "—"}</span>
+                    {" · "}
+                    <span className="font-mono">fechaEmisionFinal=</span>
+                    <span className="font-mono text-[11px]">{diagnostics.felQueryEcho.fechaEmisionFinal ?? "—"}</span>
+                  </p>
+                )}
               {diagnostics.felQueryEcho && (
                 <p className="text-gray-600">
                   Parámetros consulta-dte (eco): <span className="font-mono">establecimiento=</span>{" "}
@@ -448,11 +517,12 @@ export function SatImportPanel({
               )}
               {diagnostics.felQueryEcho?.reintentosConsulta && diagnostics.felQueryEcho.reintentosConsulta.length > 0 ? (
                 <p className="text-xs text-indigo-900 bg-indigo-50/90 rounded-md border border-indigo-100 px-2 py-1.5">
-                  Reintentos de consulta-dte activados por entorno:{" "}
+                  Reintentos automáticos que devolvieron datos:{" "}
                   <span className="font-mono">{diagnostics.felQueryEcho.reintentosConsulta.join(", ")}</span>
-                  . Variables:{" "}
-                  <code className="text-[10px]">SAT_FEL_EMPTY_RETRY_ESTABLECIMIENTO_ZERO=1</code>,{" "}
-                  <code className="text-[10px]">SAT_FEL_EMPTY_RETRY_R_DUPLICATE_NIT=1</code>.
+                  <span className="text-indigo-800/90">
+                    {" "}
+                    (establecimiento=0, fechas dd/MM/yyyy en URL, nitIdReceptor duplicado en R, según el caso).
+                  </span>
                 </p>
               ) : null}
               <ul className="list-none space-y-1.5 font-mono text-[11px]">
