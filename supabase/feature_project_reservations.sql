@@ -1,4 +1,4 @@
--- Reservas de presupuesto por proyecto/categoria.
+-- Compromisos de presupuesto por proyecto/categoria.
 -- Ejecutar en Supabase SQL Editor (bases ya existentes).
 
 create table if not exists public.project_reservations (

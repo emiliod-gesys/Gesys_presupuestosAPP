@@ -69,7 +69,7 @@ export function AddTransactionButton({
         .eq("project_id", projectId)
         .maybeSingle()
       if (!reservationOk) {
-        toast("error", "La reserva seleccionada no pertenece a este proyecto")
+        toast("error", "El compromiso seleccionado no pertenece a este proyecto")
         setLoading(false)
         return
       }
@@ -172,8 +172,8 @@ export function AddTransactionButton({
           </div>
           {reservationOptions.length > 0 && (
             <Select
-              label="Reserva asociada"
-              options={[{ value: "", label: "Sin reserva" }, ...reservationOptions]}
+              label="Compromiso asociado"
+              options={[{ value: "", label: "Sin compromiso" }, ...reservationOptions]}
               value={form.reservation_id}
               onChange={(e) => setForm({ ...form, reservation_id: e.target.value })}
             />

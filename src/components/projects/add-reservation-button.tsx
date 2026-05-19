@@ -35,7 +35,7 @@ export function AddReservationButton({
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!form.title.trim() || !form.category_id || !form.reserved_amount) {
-      toast("error", "Completa título, renglón y monto reservado")
+      toast("error", "Completa título, renglón y monto comprometido")
       return
     }
     setLoading(true)
@@ -56,9 +56,9 @@ export function AddReservationButton({
       created_by: user.id,
     })
     if (error) {
-      toast("error", formatSupabaseError(error, "No se pudo crear la reserva"))
+      toast("error", formatSupabaseError(error, "No se pudo crear el compromiso"))
     } else {
-      toast("success", "Reserva creada")
+      toast("success", "Compromiso creado")
       setOpen(false)
       setForm({ title: "", category_id: "", reserved_amount: "", details: "" })
       router.refresh()
@@ -70,12 +70,12 @@ export function AddReservationButton({
     <>
       <Button type="button" size="sm" onClick={() => setOpen(true)} disabled={!!readOnly}>
         <Plus className="h-3.5 w-3.5" />
-        Nueva reserva
+        Nuevo compromiso
       </Button>
-      <Modal open={open} onClose={() => setOpen(false)} title="Crear reserva" size="lg">
+      <Modal open={open} onClose={() => setOpen(false)} title="Crear compromiso" size="lg">
         <form onSubmit={submit} className="space-y-4 p-6">
           <Input
-            label="Título de la reserva *"
+            label="Título del compromiso *"
             value={form.title}
             onChange={(e) => setForm({ ...form, title: e.target.value })}
             placeholder="Ej. Compra de acero fase 1"
@@ -90,7 +90,7 @@ export function AddReservationButton({
               required
             />
             <Input
-              label="Monto reservado *"
+              label="Monto comprometido *"
               type="number"
               min="0.01"
               step="0.01"
@@ -111,7 +111,7 @@ export function AddReservationButton({
               Cancelar
             </Button>
             <Button type="submit" loading={loading}>
-              Guardar reserva
+              Guardar compromiso
             </Button>
           </div>
         </form>

@@ -92,11 +92,11 @@ export default async function BudgetStatementPrintPage({ params }: { params: Pro
               <td className="py-2 text-right font-semibold">{formatCurrency(spentForSummary, project.currency)}</td>
             </tr>
             <tr className="border-b border-gray-100">
-              <td className="py-2 pr-4 text-gray-600">Reservado pendiente (cupo sin ejecutar en reservas)</td>
+              <td className="py-2 pr-4 text-gray-600">Comprometido pendiente (cupo sin ejecutar en compromisos)</td>
               <td className="py-2 text-right font-semibold">{formatCurrency(totalPendingReserved, project.currency)}</td>
             </tr>
             <tr>
-              <td className="py-2 pr-4 text-gray-600">Saldo disponible (total − ejecutado − reserva pendiente)</td>
+              <td className="py-2 pr-4 text-gray-600">Saldo disponible (total − ejecutado − compromiso pendiente)</td>
               <td
                 className={cn(
                   "py-2 text-right font-semibold",
@@ -119,7 +119,7 @@ export default async function BudgetStatementPrintPage({ params }: { params: Pro
                 <th className="px-3 py-2 font-semibold text-gray-800">Renglón</th>
                 <th className="px-3 py-2 text-right font-semibold text-gray-800">Presupuesto</th>
                 <th className="px-3 py-2 text-right font-semibold text-gray-800">Ejecutado</th>
-                <th className="px-3 py-2 text-right font-semibold text-gray-800">Reserv. pend.</th>
+                <th className="px-3 py-2 text-right font-semibold text-gray-800">Comp. pend.</th>
                 <th className="px-3 py-2 text-right font-semibold text-gray-800">Disponible</th>
                 <th className="px-3 py-2 text-right font-semibold text-gray-800">% comprom.</th>
               </tr>

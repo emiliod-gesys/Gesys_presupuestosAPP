@@ -56,8 +56,8 @@ export function budgetBarWidthPct(pct: number) {
 }
 
 /**
- * Anchos % para barra apilada: ejecutado (verde en UI) + reserva pendiente (morado).
- * Si ejecutado + reserva superan el presupuesto, los tramos se reparten el 100 % del track en proporción.
+ * Anchos % para barra apilada: ejecutado (verde en UI) + compromiso pendiente (morado).
+ * Si ejecutado + compromiso superan el presupuesto, los tramos se reparten el 100 % del track en proporción.
  */
 export function budgetCommittedStackWidths(spent: number, pending: number, budget: number) {
   const b = Number(budget) || 0

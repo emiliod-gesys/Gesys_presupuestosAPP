@@ -162,7 +162,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
             {/* Total */}
             <div className="p-4 bg-gray-50 rounded-xl">
               <div className="flex justify-between text-sm mb-2">
-                <span className="text-gray-500">Comprometido (ejecutado + reserva pendiente)</span>
+                <span className="text-gray-500">Comprometido (ejecutado + compromiso pendiente)</span>
                 <span className="font-semibold">{totalPct.toFixed(1)}%</span>
               </div>
               <BudgetCommittedBar
@@ -179,7 +179,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
                 </span>
                 <span className="inline-flex items-center gap-1.5">
                   <span className="h-2 w-2 shrink-0 rounded-sm bg-violet-600" aria-hidden />
-                  Reservado pendiente
+                  Comprometido pendiente
                 </span>
               </div>
               <div className="mt-2 space-y-1 text-sm">
@@ -188,7 +188,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
                   <span>{formatCurrency(Math.max(0, totalSpent), project.currency)}</span>
                 </div>
                 <div className="flex justify-between text-indigo-800/90">
-                  <span>Reservado pendiente</span>
+                  <span>Comprometido pendiente</span>
                   <span>{formatCurrency(Math.max(0, totalPendingReserved), project.currency)}</span>
                 </div>
                 <div className="flex justify-between border-t border-gray-200 pt-2 font-bold text-gray-900">
@@ -305,7 +305,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
               <span className="font-semibold text-red-600">{formatCurrency(Math.max(0, totalSpent), project.currency)}</span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-gray-500">Reservado pendiente</span>
+              <span className="text-gray-500">Comprometido pendiente</span>
               <span className="font-semibold text-indigo-800">{formatCurrency(Math.max(0, totalPendingReserved), project.currency)}</span>
             </div>
             <div className="flex justify-between text-sm border-t pt-3">

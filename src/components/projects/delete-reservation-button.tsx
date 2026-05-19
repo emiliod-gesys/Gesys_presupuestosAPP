@@ -18,16 +18,16 @@ export function DeleteReservationButton({
   const [loading, setLoading] = useState(false)
 
   const remove = async () => {
-    if (!confirm(`¿Eliminar la reserva "${title}"? Las transacciones relacionadas se conservarán.`)) return
+    if (!confirm(`¿Eliminar el compromiso "${title}"? Las transacciones relacionadas se conservarán.`)) return
     setLoading(true)
     const supabase = createClient()
     const { error } = await supabase.from("project_reservations").delete().eq("id", reservationId)
     if (error) {
-      toast("error", error.message || "No se pudo eliminar la reserva")
+      toast("error", error.message || "No se pudo eliminar el compromiso")
       setLoading(false)
       return
     }
-    toast("success", "Reserva eliminada")
+    toast("success", "Compromiso eliminado")
     setLoading(false)
     router.refresh()
   }
@@ -38,7 +38,7 @@ export function DeleteReservationButton({
       onClick={() => void remove()}
       disabled={loading}
       className="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-60"
-      title="Eliminar reserva"
+      title="Eliminar compromiso"
     >
       <Trash2 className="h-4 w-4" />
     </button>

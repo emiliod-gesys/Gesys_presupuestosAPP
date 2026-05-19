@@ -74,8 +74,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     ["Presupuesto total del proyecto", project.total_budget],
     ["Suma de renglones", sumLines],
     ["Total ejecutado", Math.max(0, totalSpent)],
-    ["Reservado pendiente", totalPendingReserved],
-    ["Saldo disponible (total − ejecutado − reserva pendiente)", Number(project.total_budget) - Math.max(0, totalSpent) - totalPendingReserved],
+    ["Comprometido pendiente", totalPendingReserved],
+    ["Saldo disponible (total − ejecutado − compromiso pendiente)", Number(project.total_budget) - Math.max(0, totalSpent) - totalPendingReserved],
     ["Moneda", project.currency],
   ]
 
@@ -94,7 +94,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     return [row(header.name, header)]
   })
 
-  const renglones = [["Renglón", "Descripción", "Presupuesto", "Ejecutado", "Reserv. pend.", "Disponible", "% comprom."], ...renglonesRows]
+  const renglones = [["Renglón", "Descripción", "Presupuesto", "Ejecutado", "Comp. pend.", "Disponible", "% comprom."], ...renglonesRows]
 
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(resumen), "Resumen")

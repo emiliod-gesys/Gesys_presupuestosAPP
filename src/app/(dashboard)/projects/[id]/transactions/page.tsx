@@ -199,16 +199,16 @@ export default async function TransactionsPage({
         </Card>
         <Card>
           <CardContent className="pt-5">
-            <p className="mb-1 text-xs text-gray-500">Reservado pendiente</p>
+            <p className="mb-1 text-xs text-gray-500">Comprometido pendiente</p>
             <p className="text-xl font-bold text-indigo-900">{formatCurrency(Math.max(0, totalPendingReserved), currency)}</p>
-            <p className="mt-1 text-xs text-gray-400">Cupo de reservas aún no cubierto por gastos vinculados.</p>
+            <p className="mt-1 text-xs text-gray-400">Cupo de compromisos aún no cubierto por gastos vinculados.</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-5">
             <p className="mb-1 text-xs text-gray-500">Movimientos registrados</p>
             <p className="text-xl font-bold text-gray-900">{txCount}</p>
-            <p className="mt-1 text-xs text-gray-400">Solo gastos; el disponible del presupuesto resta también las reservas.</p>
+            <p className="mt-1 text-xs text-gray-400">Solo gastos; el disponible del presupuesto resta también los compromisos.</p>
           </CardContent>
         </Card>
       </div>
@@ -302,7 +302,7 @@ export default async function TransactionsPage({
                           )}
                           {reservationName && (
                             <span className="rounded bg-indigo-50 px-1.5 py-0.5 text-indigo-700">
-                              Reserva: {reservationName}
+                              Compromiso: {reservationName}
                             </span>
                           )}
                           {tx.reference_number && <span>Ref: {tx.reference_number}</span>}

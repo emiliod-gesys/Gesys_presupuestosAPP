@@ -19,7 +19,7 @@ export function ProjectNav({ projectId, role, projectName }: ProjectNavProps) {
   const tabs = [
     { href: base, label: "Resumen" },
     { href: `${base}/budget`, label: "Presupuesto" },
-    { href: `${base}/reservations`, label: "Reservas" },
+    { href: `${base}/reservations`, label: "Compromisos" },
     { href: `${base}/transactions`, label: "Transacciones" },
     { href: `${base}/odoo`, label: "Odoo" },
     { href: `${base}/sat`, label: "SAT" },

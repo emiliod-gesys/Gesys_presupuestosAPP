@@ -1,6 +1,6 @@
 /**
- * Reservas: el cupo aún no ejecutado dentro de cada reserva resta del presupuesto
- * disponible del renglón, sin contar dos veces los gastos ya imputados a esa reserva.
+ * Compromisos: el cupo aún no ejecutado dentro de cada compromiso resta del presupuesto
+ * disponible del renglón, sin contar dos veces los gastos ya imputados a ese compromiso.
  */
 
 export type ReservationBudgetRow = {
@@ -37,7 +37,7 @@ export function expenseSumByReservationIdFromTxRows(rows: TxForReservation[]): R
   return out
 }
 
-/** Cupo de reserva aún no cubierto por gastos ligados a esa reserva, por categoría. */
+/** Cupo de compromiso aún no cubierto por gastos ligados a ese compromiso, por categoría. */
 export function pendingReservedByCategory(
   reservations: ReservationBudgetRow[],
   expenseByReservationId: Record<string, number>

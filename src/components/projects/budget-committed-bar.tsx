@@ -10,7 +10,7 @@ type Props = {
   className?: string
 }
 
-/** Barra apilada: ejecutado (verde) + reserva pendiente (morado). */
+/** Barra apilada: ejecutado (verde) + compromiso pendiente (morado). */
 export function BudgetCommittedBar({
   spent,
   pending,
@@ -30,7 +30,7 @@ export function BudgetCommittedBar({
     <div
       className={cn("flex w-full overflow-hidden rounded-full", heightClass, trackClassName, className)}
       role="img"
-      aria-label="Compromiso de presupuesto: tramo verde ejecutado, tramo morado reserva pendiente"
+      aria-label="Compromiso de presupuesto: tramo verde ejecutado, tramo morado compromiso pendiente"
     >
       {spentWidth > 0 ? (
         <div

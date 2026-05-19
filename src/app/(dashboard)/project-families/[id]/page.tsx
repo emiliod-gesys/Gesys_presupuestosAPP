@@ -103,7 +103,7 @@ export default async function ProjectFamilyComparePage({ params }: { params: Pro
                 <th className="px-4 py-3">Estado</th>
                 <th className="px-4 py-3 text-right">Presupuesto</th>
                 <th className="px-4 py-3 text-right">Gastado</th>
-                <th className="px-4 py-3 text-right">Reserv. pend.</th>
+                <th className="px-4 py-3 text-right">Comp. pend.</th>
                 <th className="px-4 py-3 text-right">% compromiso</th>
               </tr>
             </thead>

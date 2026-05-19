@@ -146,8 +146,8 @@ export default async function DashboardPage() {
                 <p className="mt-1 text-2xl font-bold text-gray-900">{globalPct.toFixed(0)}%</p>
                 <p className="text-xs text-gray-500">
                   {mixedCurrency
-                    ? "Gasto + reserva pendiente sobre presupuesto (varias monedas; referencia aproximada)."
-                    : "Gasto ejecutado más reservas pendientes, sobre la suma de presupuestos."}
+                    ? "Gasto + compromiso pendiente sobre presupuesto (varias monedas; referencia aproximada)."
+                    : "Gasto ejecutado más compromisos pendientes, sobre la suma de presupuestos."}
                 </p>
               </CardContent>
             </Card>
@@ -215,7 +215,7 @@ export default async function DashboardPage() {
                         {/* Budget bar */}
                         <div className="space-y-1.5">
                           <div className="flex justify-between text-xs text-gray-500">
-                            <span>Compromiso (gasto + reserva)</span>
+                            <span>Comprometido (gasto + compromiso)</span>
                             <span className="font-medium">{pct.toFixed(1)}%</span>
                           </div>
                           <BudgetCommittedBar
@@ -226,7 +226,7 @@ export default async function DashboardPage() {
                           />
                           <div className="flex flex-wrap justify-between gap-x-2 gap-y-1 text-xs">
                             <span className="text-gray-500">{formatCurrency(spent, project.currency)} gastado</span>
-                            <span className="text-indigo-800/90">{formatCurrency(pending, project.currency)} reserv. pend.</span>
+                            <span className="text-indigo-800/90">{formatCurrency(pending, project.currency)} comp. pend.</span>
                             <span className="ml-auto font-medium text-gray-700">{formatCurrency(project.total_budget, project.currency)}</span>
                           </div>
                         </div>

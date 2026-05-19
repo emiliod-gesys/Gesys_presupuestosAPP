@@ -340,10 +340,10 @@ export function OdooImportPanel({
       })
       const data = await res.json()
       if (!res.ok) {
-        toast("error", data.message || "Error al importar reservas")
+        toast("error", data.message || "Error al importar compromisos")
         return
       }
-      toast("success", `Reservas creadas: ${data.imported}${data.skipped?.length ? ` · omitidas: ${data.skipped.length}` : ""}`)
+      toast("success", `Compromisos creados: ${data.imported}${data.skipped?.length ? ` · omitidas: ${data.skipped.length}` : ""}`)
       if (data.errors?.length) toast("error", data.errors[0])
       router.refresh()
       setSelectedPo(new Set())
@@ -578,10 +578,10 @@ export function OdooImportPanel({
         <CardHeader>
           <div className="flex flex-wrap items-center gap-2">
             <Package className="h-5 w-5 text-indigo-600" />
-            <h2 className="text-sm font-semibold text-gray-900">Órdenes de compra → Reservas</h2>
+            <h2 className="text-sm font-semibold text-gray-900">Órdenes de compra → Compromisos</h2>
           </div>
           <p className="text-xs text-gray-500">
-            Importa órdenes confirmadas o recibidas en Odoo como reservas de presupuesto en el renglón que elijas.
+            Importa órdenes confirmadas o recibidas en Odoo como compromisos de presupuesto en el renglón que elijas.
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -596,7 +596,7 @@ export function OdooImportPanel({
               <Download className="h-4 w-4" /> Cargar órdenes de compra
             </Button>
             <Button type="button" onClick={importPurchaseOrders} loading={poImporting} disabled={!canImport || selectedPo.size === 0}>
-              Importar seleccionadas como reservas
+              Importar seleccionadas como compromisos
             </Button>
           </div>
           {poRows.length > 0 && (

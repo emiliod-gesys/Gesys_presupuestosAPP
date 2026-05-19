@@ -78,9 +78,9 @@ export default async function ReservationsPage({ params }: { params: Promise<{ i
         <CardHeader>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h2 className="text-sm font-semibold text-gray-900">Reservas de presupuesto</h2>
+              <h2 className="text-sm font-semibold text-gray-900">Compromisos de presupuesto</h2>
               <p className="mt-1 text-xs text-gray-500">
-                Reserva montos por renglón y asigna transacciones a cada reserva para controlar su ejecución.
+                Compromete montos por renglón y asigna transacciones a cada compromiso para controlar su ejecución.
               </p>
             </div>
             {canMutate && (
@@ -95,7 +95,7 @@ export default async function ReservationsPage({ params }: { params: Promise<{ i
         <CardContent className="border-t border-gray-100 pt-4">
           {reservationRows.length === 0 ? (
             <p className="py-8 text-center text-sm text-gray-500">
-              Aún no hay reservas. Crea una para apartar presupuesto por renglón.
+              Aún no hay compromisos. Crea uno para apartar presupuesto por renglón.
             </p>
           ) : (
             <div className="space-y-3">
@@ -138,7 +138,7 @@ export default async function ReservationsPage({ params }: { params: Promise<{ i
 
                     <div className="mt-3 grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
                       <div className="rounded-lg bg-gray-50 px-3 py-2">
-                        <p className="text-gray-500">Reservado</p>
+                        <p className="text-gray-500">Comprometido</p>
                         <p className="font-semibold text-gray-900">{formatCurrency(reserved, currency)}</p>
                       </div>
                       <div className="rounded-lg bg-gray-50 px-3 py-2">
