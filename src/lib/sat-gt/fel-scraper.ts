@@ -10,6 +10,7 @@ import {
   fetchFelZipXmlLines,
   type FelConsultaDateFormat,
   type FelConsultaDateRangeKind,
+  type FelRecibidasAttempt,
   type FelXmlConverted,
 } from "./fel-api"
 import {
@@ -333,7 +334,7 @@ export async function runSatFelExtraction(opts: {
   let dateFormatUsed: FelConsultaDateFormat = "iso"
   let portalSniffHits: SatFelRunDiagnostics["portalSniffHits"]
   let felconsStorageHints: Record<string, string> | undefined
-  let recibidasAttempts: { mode: string; rowCount: number }[] = []
+  let recibidasAttempts: FelRecibidasAttempt[] = []
 
   let prePurchases: unknown = {}
   let purchaseList: Record<string, unknown>[] = []
