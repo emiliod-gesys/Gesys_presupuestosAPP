@@ -27,6 +27,7 @@ import {
   isFelCodigoClientError,
   normalizeSatDteRecord,
 } from "./fel-rows"
+import { isoToDdMmYyyyDisplay, subtractMonthsFromIso } from "./dates"
 import type { SatDteListRow, SatFelCheckpoint, SatFelRunDiagnostics } from "./fel-types"
 
 /**
@@ -321,6 +322,8 @@ export async function runSatFelExtraction(opts: {
   let prePurchases: unknown = {}
   let purchaseList: Record<string, unknown>[] = []
   let recibidasQueryMode: string | null = null
+  let recibidasLastAttemptMode: string | null = null
+  let recibidasWidenFrom: string | null = null
   let recibidasDateKind: FelConsultaDateRangeKind = "emision"
 
   if (felconsPage && process.env.SAT_FEL_DISABLE_PORTAL_UI !== "1") {
@@ -395,7 +398,39 @@ export async function runSatFelExtraction(opts: {
     purchaseList = extractConsultaDteList(recibidasBest.data)
     prePurchases = recibidasBest.data
     recibidasQueryMode = recibidasBest.winningMode
+    recibidasLastAttemptMode = recibidasBest.lastAttemptMode
     recibidasAttempts = recibidasBest.attempts
+
+    if (purchaseList.length === 0 && process.env.SAT_FEL_DISABLE_AUTO_WIDEN !== "1") {
+      const widenMonths = Math.min(24, Math.max(1, Number(process.env.SAT_FEL_AUTO_WIDEN_MONTHS || "6") || 6))
+      const qFromWide = subtractMonthsFromIso(qFrom, widenMonths)
+      if (qFromWide !== qFrom) {
+        cp("sat.api_recibidos_widen", `${qFrom} -> ${qFromWide}`)
+        intentosConsulta.push(`widen_${widenMonths}m`)
+        const wide = await fetchFelRecibidasBestEffort(token, cookieHeader, apiUsuario, qFromWide, qTo, {
+          dateFormat: "iso",
+          onCheckpoint: mergeCp("R"),
+          ...mergedBase,
+        })
+        recibidasAttempts = [
+          ...recibidasAttempts,
+          ...wide.attempts.map((a) => ({ ...a, mode: `widen_${widenMonths}m:${a.mode}` })),
+        ]
+        const wideRows = extractConsultaDteList(wide.data)
+        if (wideRows.length > 0) {
+          prePurchases = wide.data
+          purchaseList = wideRows
+          recibidasQueryMode = wide.winningMode ? `widen_${widenMonths}m:${wide.winningMode}` : `widen_${widenMonths}m`
+          recibidasLastAttemptMode = wide.lastAttemptMode
+          recibidasWidenFrom = qFromWide
+          warnings.push(
+            `Compras encontradas ampliando «desde» a ${isoToDdMmYyyyDisplay(qFromWide)} (emisión en API). El rango que pediste (${isoToDdMmYyyyDisplay(qFrom)}–${isoToDdMmYyyyDisplay(qTo)}) no incluía la fecha de emisión de esos DTE.`
+          )
+        } else {
+          recibidasLastAttemptMode = wide.lastAttemptMode ?? recibidasLastAttemptMode
+        }
+      }
+    }
 
     if (purchaseList.length === 0) {
       for (const altUsuario of usuarioCandidates) {
@@ -748,6 +783,8 @@ export async function runSatFelExtraction(opts: {
     consultaTransport,
     intentosConsulta: intentosConsulta.length > 0 ? [...intentosConsulta] : undefined,
     recibidasQueryMode: recibidasQueryMode ?? undefined,
+    recibidasLastAttemptMode: recibidasLastAttemptMode ?? undefined,
+    recibidasWidenFrom: recibidasWidenFrom ?? undefined,
     recibidasAttempts,
     felConsultaUsuariosProbados: usuarioCandidates,
     felconsStorageHints,

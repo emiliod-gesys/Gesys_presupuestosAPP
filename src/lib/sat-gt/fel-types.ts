@@ -68,6 +68,10 @@ export interface SatFelRunDiagnostics {
   intentosConsulta?: string[]
   /** Modo que devolvió filas en compras (R), si hubo alguno. */
   recibidasQueryMode?: string | null
+  /** Última variante ACCEPTED probada en R (aunque devolviera 0 filas). */
+  recibidasLastAttemptMode?: string | null
+  /** Si se amplió «desde» automáticamente (emisión). */
+  recibidasWidenFrom?: string | null
   /** Resumen de variantes R probadas (recepción vs emisión, nit, etc.). */
   recibidasAttempts?: { mode: string; rowCount: number; codigo?: string | null }[]
   /** Valores de usuario= probados si el primero devolvió 0 filas. */

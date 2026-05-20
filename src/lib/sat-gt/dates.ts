@@ -55,6 +55,21 @@ export function isoToFelDdMmYyyy(iso: string): string {
   return `${String(p.d).padStart(2, "0")}/${String(p.m).padStart(2, "0")}/${p.y}`
 }
 
+/** Resta meses a una fecha ISO (para ampliar «desde» en consulta DTE por emisión). */
+export function subtractMonthsFromIso(iso: string, months: number): string {
+  const p = parseIsoDateYmd(iso)
+  if (!p || months <= 0) return iso.trim()
+  let y = p.y
+  let m = p.m - months
+  while (m < 1) {
+    m += 12
+    y -= 1
+  }
+  const lastDay = new Date(y, m, 0).getDate()
+  const d = Math.min(p.d, lastDay)
+  return isoDateYmdFromParts(y, m, d)
+}
+
 export function defaultSatDateRangeIso(): { from: string; to: string } {
   const today = new Date()
   const start = new Date(today.getFullYear(), today.getMonth(), 1)

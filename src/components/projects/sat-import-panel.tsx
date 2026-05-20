@@ -467,8 +467,17 @@ export function SatImportPanel({
                 <p className="text-xs text-emerald-900 bg-emerald-50/90 rounded-md border border-emerald-100 px-2 py-1.5">
                   Compras (R) con datos vía modo:{" "}
                   <span className="font-mono">{diagnostics.recibidasQueryMode}</span>
-                  {diagnostics.recibidasQueryMode.includes("recepcion") ? " (fechas de recepción en la URL)" : null}
-                  {diagnostics.recibidasQueryMode === "portal_ui" ? " (consulta disparada en la pantalla FEL)" : null}
+                  {diagnostics.recibidasWidenFrom ? (
+                    <> · rango ampliado desde <span className="font-mono">{diagnostics.recibidasWidenFrom}</span></>
+                  ) : null}
+                </p>
+              ) : diagnostics.recibidasLastAttemptMode ? (
+                <p className="text-xs text-gray-700 bg-gray-50 rounded-md border border-gray-200 px-2 py-1.5">
+                  Última variante R probada (0 filas):{" "}
+                  <span className="font-mono">{diagnostics.recibidasLastAttemptMode}</span>
+                  {" · "}
+                  consulta vía axios (como moore-rpa) salvo{" "}
+                  <span className="font-mono">SAT_FEL_PREFER_BROWSER=1</span>
                 </p>
               ) : null}
               {diagnostics.recibidasAttempts && diagnostics.recibidasAttempts.length > 0 ? (

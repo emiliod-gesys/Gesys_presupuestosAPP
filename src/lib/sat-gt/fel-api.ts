@@ -328,17 +328,70 @@ export async function fetchFelConsultaDteOnce(
       : {}),
   }
   const url = buildFelConsultaDteUrl(user, startDate, endDate, operationType, reqOpts)
+  return fetchFelConsultaDteTransport(
+    token,
+    cookieHeader,
+    user,
+    startDate,
+    endDate,
+    operationType,
+    reqOpts,
+    url,
+    opts
+  )
+}
+
+/** moore-rpa usa axios; navegador solo si SAT_FEL_PREFER_BROWSER=1 o reintento SAT_FEL_BROWSER_ON_EMPTY=1. */
+async function fetchFelConsultaDteTransport(
+  token: string,
+  cookieHeader: string,
+  user: string,
+  startDate: string,
+  endDate: string,
+  operationType: "E" | "R",
+  reqOpts: FelConsultaDteOpts,
+  url: string,
+  opts?: FelConsultaDteMergedOpts
+): Promise<unknown> {
   const page = opts?.felconsPage
-  if (page && process.env.SAT_FEL_DISABLE_BROWSER_FETCH !== "1") {
+  const browserOff = process.env.SAT_FEL_DISABLE_BROWSER_FETCH === "1"
+  const browserFirst = process.env.SAT_FEL_PREFER_BROWSER === "1"
+
+  const viaBrowser = async () => {
+    if (!page || browserOff) throw new Error("browser_fetch_disabled")
+    opts?.onCheckpoint?.("transport", "browser")
+    return fetchFelConsultaDteViaPage(page, token, url)
+  }
+  const viaAxios = async () => {
+    opts?.onCheckpoint?.("transport", "axios")
+    return fetchFelConsultaDte(token, cookieHeader, user, startDate, endDate, operationType, reqOpts)
+  }
+
+  if (browserFirst && page && !browserOff) {
     try {
-      opts?.onCheckpoint?.("transport", "browser")
-      return await fetchFelConsultaDteViaPage(page, token, url)
+      return await viaBrowser()
     } catch (e) {
       opts?.onCheckpoint?.("browser_fetch_fail", (e as Error).message?.slice(0, 160))
     }
   }
-  opts?.onCheckpoint?.("transport", "axios")
-  return fetchFelConsultaDte(token, cookieHeader, user, startDate, endDate, operationType, reqOpts)
+
+  const axiosData = await viaAxios()
+  if (
+    page &&
+    !browserOff &&
+    process.env.SAT_FEL_BROWSER_ON_EMPTY === "1" &&
+    extractConsultaDteList(axiosData).length === 0 &&
+    !isFelCodigoClientError(felMessageFromResponse(axiosData).codigo)
+  ) {
+    try {
+      opts?.onCheckpoint?.("transport", "browser_on_empty")
+      const browserData = await viaBrowser()
+      if (extractConsultaDteList(browserData).length > 0) return browserData
+    } catch (e) {
+      opts?.onCheckpoint?.("browser_fetch_fail", (e as Error).message?.slice(0, 160))
+    }
+  }
+  return axiosData
 }
 
 /** Variantes de consulta R (recibidas): recepción vs emisión y nitIdReceptor. */
@@ -349,7 +402,12 @@ export async function fetchFelRecibidasBestEffort(
   startDate: string,
   endDate: string,
   opts?: FelConsultaDteMergedOpts
-): Promise<{ data: unknown; winningMode: string | null; attempts: FelRecibidasAttempt[] }> {
+): Promise<{
+  data: unknown
+  winningMode: string | null
+  lastAttemptMode: string | null
+  attempts: FelRecibidasAttempt[]
+}> {
   const plan: Array<{
     mode: string
     dateRangeKind: FelConsultaDateRangeKind
@@ -394,11 +452,11 @@ export async function fetchFelRecibidasBestEffort(
       lastOkMode = step.mode
     }
     if (rowCount > 0) {
-      return { data, winningMode: step.mode, attempts }
+      return { data, winningMode: step.mode, lastAttemptMode: step.mode, attempts }
     }
   }
 
-  return { data: lastOk, winningMode: lastOkMode, attempts }
+  return { data: lastOk, winningMode: null, lastAttemptMode: lastOkMode, attempts }
 }
 
 export async function fetchFelConsultaDteMergedPages(
@@ -429,17 +487,17 @@ export async function fetchFelConsultaDteMergedPages(
       ...extra,
     }
     const url = buildFelConsultaDteUrl(user, startDate, endDate, operationType, reqOpts)
-    const page = opts?.felconsPage
-    if (page && process.env.SAT_FEL_DISABLE_BROWSER_FETCH !== "1") {
-      try {
-        k?.("transport", "browser")
-        return await fetchFelConsultaDteViaPage(page, token, url)
-      } catch (e) {
-        k?.("browser_fetch_fail", (e as Error).message?.slice(0, 160))
-      }
-    }
-    k?.("transport", "axios")
-    return fetchFelConsultaDte(token, cookieHeader, user, startDate, endDate, operationType, reqOpts)
+    return fetchFelConsultaDteTransport(
+      token,
+      cookieHeader,
+      user,
+      startDate,
+      endDate,
+      operationType,
+      reqOpts,
+      url,
+      opts
+    )
   }
 
   /** Algunos despliegues del SAT devuelven `data` vacío solo con `pagina`; con `tamanoPagina` sí hay filas. */
