@@ -310,6 +310,7 @@ export async function runSatFelExtraction(opts: {
   const nitForReceptor = opts.profileNit?.trim() || undefined
   const usuarioCandidates = buildFelConsultaUsuarioCandidates(username, opts.profileNit, token)
   const felJwtClaims = felJwtClaimsForDiagnostics(token)
+  let felconsSessionUsuario: string | null = null
   if (usuarioCandidates[0]) apiUsuario = usuarioCandidates[0]
   cp("sat.usuario_candidates", usuarioCandidates.slice(0, 6).join("|"))
 
@@ -340,7 +341,6 @@ export async function runSatFelExtraction(opts: {
   let recibidasLastAttemptMode: string | null = null
   let recibidasWidenFrom: string | null = null
   let recibidasWidenAttemptFrom: string | null = null
-  let felconsSessionUsuario: string | null = null
   let recibidasDateKind: FelConsultaDateRangeKind = "emision"
 
   const applySniffJson = (json: unknown, source: string) => {
