@@ -265,12 +265,11 @@ export async function runSatFelExtraction(opts: {
     await page.locator("text/Factura Electrónica en Línea (FEL)").hover()
     await new Promise((r) => setTimeout(r, 500))
     const felPage = await openFelconsConsultaFromMenu(browser, page)
-    page = felPage
-    cp("sat.felcons_consulta_page", page.url().slice(0, 120))
+    cp("sat.felcons_consulta_page", felPage.url().slice(0, 120))
     /** Dejar que la SPA de felcons asiente cookies / token antes de leerlos (moore-rpa espera 1s; aquí un poco más). */
     await new Promise((r) => setTimeout(r, 2000))
 
-    const { accessTokenCookie, cookies } = await getAccessTokenCookie(page, 25000)
+    const { accessTokenCookie, cookies } = await getAccessTokenCookie(felPage, 25000)
     if (!accessTokenCookie?.value) {
       throw new Error(
         "No se obtuvo ACCESS_TOKEN del portal SAT. Comprueba credenciales o vuelve a intentar; el portal puede haber cambiado."
@@ -278,7 +277,7 @@ export async function runSatFelExtraction(opts: {
     }
     token = accessTokenCookie.value
     cookieHeader = buildCookieHeader(cookies)
-    felconsPage = page
+    felconsPage = felPage
     cp("sat.access_token_ready", `cookies=${cookies.length}`)
     await new Promise((r) => setTimeout(r, 1500))
 
