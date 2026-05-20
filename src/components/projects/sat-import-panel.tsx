@@ -471,6 +471,12 @@ export function SatImportPanel({
                   </span>
                 </p>
               ) : null}
+              {diagnostics.felSampleConsultaUrlR ? (
+                <p className="text-[10px] text-gray-600 break-all">
+                  URL ejemplo consulta R (moore-rpa, sin token):{" "}
+                  <span className="font-mono text-[10px]">{diagnostics.felSampleConsultaUrlR}</span>
+                </p>
+              ) : null}
               <p className="text-gray-600">
                 Formato de fechas en la URL de la API:{" "}
                 <span className="font-mono">{diagnostics.felDateFormatUsed ?? "iso"}</span>
