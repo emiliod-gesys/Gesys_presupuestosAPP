@@ -72,6 +72,14 @@ export interface SatFelRunDiagnostics {
   recibidasLastAttemptMode?: string | null
   /** Si se amplió «desde» automáticamente (emisión). */
   recibidasWidenFrom?: string | null
+  /** Rango «desde» usado en reintento widen (aunque siga en 0 filas). */
+  recibidasWidenAttemptFrom?: string | null
+  /** Claims del ACCESS_TOKEN (diagnóstico). */
+  felJwtClaims?: Record<string, string> | null
+  /** URL de ejemplo consulta-dte R (sin token). */
+  felSampleConsultaUrlR?: string | null
+  /** Usuario leído de la SPA felcons (storage / pantalla). */
+  felconsSessionUsuario?: string | null
   /** Resumen de variantes R probadas (recepción vs emisión, nit, etc.). */
   recibidasAttempts?: { mode: string; rowCount: number; codigo?: string | null }[]
   /** Valores de usuario= probados si el primero devolvió 0 filas. */

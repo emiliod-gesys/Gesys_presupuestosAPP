@@ -1,6 +1,7 @@
 import type { Browser, Page } from "puppeteer-core"
 import {
   felConsultaDateQueryValues,
+  felConsultaDteUrlForDiagnostics,
   felConsultaEstablecimientoExplain,
   felIdsEquivalentUsuarioNit,
   felNitIdReceptorQueryExplain,
@@ -15,9 +16,10 @@ import {
   attachFelconsConsultaSniffer,
   captureConsultaDteViaPortalUi,
   captureConsultaDteViaPortalUiEnhanced,
+  readFelconsSessionUsuario,
   readFelconsStorageHints,
 } from "./fel-portal-consulta"
-import { buildFelConsultaUsuarioCandidates } from "./fel-token"
+import { buildFelConsultaUsuarioCandidates, felJwtClaimsForDiagnostics } from "./fel-token"
 import {
   countNormalizedRows,
   describeFelResponseShape,
@@ -307,8 +309,21 @@ export async function runSatFelExtraction(opts: {
 
   const nitForReceptor = opts.profileNit?.trim() || undefined
   const usuarioCandidates = buildFelConsultaUsuarioCandidates(username, opts.profileNit, token)
+  const felJwtClaims = felJwtClaimsForDiagnostics(token)
   if (usuarioCandidates[0]) apiUsuario = usuarioCandidates[0]
   cp("sat.usuario_candidates", usuarioCandidates.slice(0, 6).join("|"))
+
+  if (felconsPage) {
+    const sessionUsuario = await readFelconsSessionUsuario(felconsPage).catch(() => null)
+    felconsSessionUsuario = sessionUsuario
+    if (sessionUsuario && sessionUsuario !== apiUsuario) {
+      cp("sat.felcons_session_usuario", sessionUsuario)
+      apiUsuario = sessionUsuario
+      if (!usuarioCandidates.includes(sessionUsuario)) {
+        usuarioCandidates.unshift(sessionUsuario)
+      }
+    }
+  }
   const mergedBase = {
     felconsPage,
     nitReceptorQueryValue: nitForReceptor,
@@ -324,7 +339,19 @@ export async function runSatFelExtraction(opts: {
   let recibidasQueryMode: string | null = null
   let recibidasLastAttemptMode: string | null = null
   let recibidasWidenFrom: string | null = null
+  let recibidasWidenAttemptFrom: string | null = null
+  let felconsSessionUsuario: string | null = null
   let recibidasDateKind: FelConsultaDateRangeKind = "emision"
+
+  const applySniffJson = (json: unknown, source: string) => {
+    const rows = extractConsultaDteList(json)
+    if (rows.length === 0) return false
+    prePurchases = json
+    purchaseList = rows
+    recibidasQueryMode = source
+    recibidasAttempts = [{ mode: source, rowCount: rows.length, codigo: felMessageFromResponse(json).codigo }]
+    return true
+  }
 
   if (felconsPage && process.env.SAT_FEL_DISABLE_PORTAL_UI !== "1") {
     felconsStorageHints = await readFelconsStorageHints(felconsPage).catch(() => undefined)
@@ -354,17 +381,17 @@ export async function runSatFelExtraction(opts: {
         urlRedacted: h.urlRedacted,
       })),
     ]
-    if (portalFirst.json) {
-      const fromPortal = extractConsultaDteList(portalFirst.json)
-      if (fromPortal.length > 0) {
-        prePurchases = portalFirst.json
-        purchaseList = fromPortal
-        recibidasQueryMode = "portal_ui_first"
-        recibidasDateKind = "recepcion"
-        recibidasAttempts = [{ mode: "portal_ui_first", rowCount: fromPortal.length }]
-        warnings.push(
-          "Compras (recibidas) obtenidas desde la consulta en pantalla del portal FEL antes de llamar a la API directa."
-        )
+    if (portalFirst.json && applySniffJson(portalFirst.json, "portal_ui_first")) {
+      recibidasDateKind = "recepcion"
+      warnings.push(
+        "Compras (recibidas) obtenidas desde la consulta en pantalla del portal FEL antes de llamar a la API directa."
+      )
+    } else {
+      const bestHit = [...portalFirst.hits, ...loadHits]
+        .filter((h) => h.operationType === "R" || h.operationType === "?")
+        .sort((a, b) => b.rowCount - a.rowCount || b.totalReported - a.totalReported)[0]
+      if (bestHit && (bestHit.rowCount > 0 || bestHit.totalReported > 0) && applySniffJson(bestHit.json, "portal_sniff")) {
+        warnings.push("Compras obtenidas de una respuesta consulta-dte capturada en el navegador (URL del portal).")
       }
     }
     cp("sat.portal_ui_recibidos_first_done", `rows=${purchaseList.length}`)
@@ -402,9 +429,10 @@ export async function runSatFelExtraction(opts: {
     recibidasAttempts = recibidasBest.attempts
 
     if (purchaseList.length === 0 && process.env.SAT_FEL_DISABLE_AUTO_WIDEN !== "1") {
-      const widenMonths = Math.min(24, Math.max(1, Number(process.env.SAT_FEL_AUTO_WIDEN_MONTHS || "6") || 6))
+      const widenMonths = Math.min(24, Math.max(1, Number(process.env.SAT_FEL_AUTO_WIDEN_MONTHS || "12") || 12))
       const qFromWide = subtractMonthsFromIso(qFrom, widenMonths)
       if (qFromWide !== qFrom) {
+        recibidasWidenAttemptFrom = qFromWide
         cp("sat.api_recibidos_widen", `${qFrom} -> ${qFromWide}`)
         intentosConsulta.push(`widen_${widenMonths}m`)
         const wide = await fetchFelRecibidasBestEffort(token, cookieHeader, apiUsuario, qFromWide, qTo, {
@@ -785,6 +813,10 @@ export async function runSatFelExtraction(opts: {
     recibidasQueryMode: recibidasQueryMode ?? undefined,
     recibidasLastAttemptMode: recibidasLastAttemptMode ?? undefined,
     recibidasWidenFrom: recibidasWidenFrom ?? undefined,
+    recibidasWidenAttemptFrom: recibidasWidenAttemptFrom ?? undefined,
+    felJwtClaims: felJwtClaims ?? undefined,
+    felSampleConsultaUrlR: felConsultaDteUrlForDiagnostics(apiUsuario, qFrom, qTo, "R"),
+    felconsSessionUsuario: felconsSessionUsuario ?? undefined,
     recibidasAttempts,
     felConsultaUsuariosProbados: usuarioCandidates,
     felconsStorageHints,

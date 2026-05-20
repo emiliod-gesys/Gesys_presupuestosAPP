@@ -81,6 +81,33 @@ export function attachFelconsConsultaSniffer(
   }
 }
 
+/** Usuario/NIT que la SPA muestra o guarda (puede diferir del login farm3). */
+export async function readFelconsSessionUsuario(page: Page): Promise<string | null> {
+  return page.evaluate(() => {
+    const pick = (s: string | null | undefined) => {
+      const t = (s ?? "").trim().replace(/\D/g, "")
+      return t.length >= 4 && t.length <= 15 ? t : null
+    }
+    for (const store of [localStorage, sessionStorage]) {
+      try {
+        for (let i = 0; i < store.length; i++) {
+          const k = store.key(i)
+          if (!k || !/usuario|nit|contrib|emisor|receptor|fel/i.test(k)) continue
+          const v = store.getItem(k)
+          const n = pick(v)
+          if (n) return n
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+    const body = document.body?.innerText ?? ""
+    const m = body.match(/NIT[:\s]*([0-9]{4,15})/i)
+    if (m?.[1]) return m[1].replace(/\D/g, "")
+    return null
+  })
+}
+
 /** Lee pistas de usuario/NIT que la SPA guarda en el navegador. */
 export async function readFelconsStorageHints(page: Page): Promise<Record<string, string>> {
   return page.evaluate(() => {

@@ -78,3 +78,30 @@ export function buildFelConsultaUsuarioCandidates(
 
   return out
 }
+
+/** Claims del JWT para diagnóstico (sin exponer el token completo). */
+export function felJwtClaimsForDiagnostics(accessToken: string): Record<string, string> | null {
+  const payload = decodeJwtPayload(accessToken)
+  if (!payload) return null
+  const out: Record<string, string> = {}
+  const keys = [
+    "sub",
+    "usuario",
+    "Usuario",
+    "nit",
+    "NIT",
+    "nitUsuario",
+    "taxId",
+    "preferred_username",
+    "user",
+    "username",
+    "name",
+    "iss",
+  ]
+  for (const key of keys) {
+    const v = payload[key]
+    if (typeof v === "string" && v.trim()) out[key] = v.trim().slice(0, 80)
+    else if (typeof v === "number" && Number.isFinite(v)) out[key] = String(v)
+  }
+  return Object.keys(out).length > 0 ? out : null
+}

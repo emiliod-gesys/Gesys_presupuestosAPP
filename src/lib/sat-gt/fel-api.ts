@@ -190,6 +190,21 @@ export function buildFelConsultaDteUrl(
   return url
 }
 
+/** URL moore-rpa para diagnóstico (sin token). */
+export function felConsultaDteUrlForDiagnostics(
+  user: string,
+  startDate: string,
+  endDate: string,
+  operationType: "E" | "R",
+  opts?: FelConsultaDteOpts
+): string {
+  return buildFelConsultaDteUrl(user, startDate, endDate, operationType, {
+    dateFormat: "iso",
+    dateRangeKind: "emision",
+    ...opts,
+  })
+}
+
 /** GET consulta-dte desde la pestaña felcons (cookies de sesión del portal). */
 /** GET consulta-dte con URL exacta (p. ej. capturada del portal). */
 export async function fetchFelConsultaDteViaPageUrl(
@@ -415,6 +430,9 @@ export async function fetchFelRecibidasBestEffort(
     estZero: boolean
     merged: boolean
   }> = [
+    ...(opts?.nitReceptorQueryValue?.trim()
+      ? [{ mode: "moore_nit_perfil", dateRangeKind: "emision" as const, forceNit: true, estZero: false, merged: false }]
+      : []),
     { mode: "moore_once", dateRangeKind: "emision", forceNit: false, estZero: false, merged: false },
     { mode: "emision_nit_omit", dateRangeKind: "emision", forceNit: false, estZero: false, merged: true },
     { mode: "emision_nit_force", dateRangeKind: "emision", forceNit: true, estZero: false, merged: true },

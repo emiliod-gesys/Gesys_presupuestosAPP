@@ -446,6 +446,31 @@ export function SatImportPanel({
                   NIT en tu perfil (referencia): <span className="font-mono text-[11px]">{diagnostics.felNitPerfil}</span>
                 </p>
               ) : null}
+              {diagnostics.felconsSessionUsuario &&
+              diagnostics.felconsSessionUsuario !== diagnostics.felConsultaUsuario ? (
+                <p className="text-amber-900 text-xs bg-amber-50 border border-amber-100 rounded-md px-2 py-1.5">
+                  Usuario detectado en la SPA felcons:{" "}
+                  <span className="font-mono">{diagnostics.felconsSessionUsuario}</span> (distinto del login mostrado
+                  arriba).
+                </p>
+              ) : null}
+              {diagnostics.recibidasWidenAttemptFrom && !diagnostics.recibidasWidenFrom ? (
+                <p className="text-gray-600 text-xs">
+                  Reintento con rango ampliado (emisión): desde{" "}
+                  <span className="font-mono">{diagnostics.recibidasWidenAttemptFrom}</span> hasta el «hasta» solicitado
+                  — también devolvió 0 filas.
+                </p>
+              ) : null}
+              {diagnostics.felJwtClaims && Object.keys(diagnostics.felJwtClaims).length > 0 ? (
+                <p className="text-[10px] text-gray-600">
+                  Token FEL (claims):{" "}
+                  <span className="font-mono">
+                    {Object.entries(diagnostics.felJwtClaims)
+                      .map(([k, v]) => `${k}=${v}`)
+                      .join(" · ")}
+                  </span>
+                </p>
+              ) : null}
               <p className="text-gray-600">
                 Formato de fechas en la URL de la API:{" "}
                 <span className="font-mono">{diagnostics.felDateFormatUsed ?? "iso"}</span>
@@ -680,10 +705,9 @@ export function SatImportPanel({
                 <p className="font-medium text-indigo-950">Si en el portal FEL ves compras (recibidas) y aquí no</p>
                 <ol className="mt-1.5 list-decimal list-inside space-y-1 text-[11px] text-gray-700">
                   <li>
-                    Para <strong>compras</strong>, el servidor prueba primero{" "}
-                    <span className="font-mono">fechaRecepcionIni/Final</span> (como la pestaña Recibidas del portal), luego
-                    emisión y otras variantes de <span className="font-mono">nitIdReceptor</span>. Mira en el diagnóstico
-                    «Variantes R probadas» y el modo ganador.
+                    La API oficial usa <span className="font-mono">fechaEmisionIni/Final</span> (como moore-rpa). Si en FEL
+                    filtras por <strong>recepción</strong>, amplía «desde» en la app o prueba el mismo rango por emisión en el
+                    portal. El servidor reintenta con ~12 meses hacia atrás automáticamente.
                   </li>
                   <li>
                     Si entras al SAT con el <strong>mismo NIT</strong> que tienes en perfil, muchas variantes dejan{" "}

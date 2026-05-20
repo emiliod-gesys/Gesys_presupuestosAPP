@@ -19,5 +19,10 @@ export async function captureConsultaDteViaPortalUi(
   return cap.json
 }
 
-export { captureConsultaDteViaPortalUiEnhanced, attachFelconsConsultaSniffer, readFelconsStorageHints } from "./fel-portal-sniff"
+export {
+  captureConsultaDteViaPortalUiEnhanced,
+  attachFelconsConsultaSniffer,
+  readFelconsStorageHints,
+  readFelconsSessionUsuario,
+} from "./fel-portal-sniff"
 export type { FelPortalSniffHit, FelPortalUiCapture } from "./fel-portal-sniff"
