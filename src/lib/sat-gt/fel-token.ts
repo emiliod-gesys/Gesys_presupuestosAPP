@@ -68,11 +68,12 @@ export function buildFelConsultaUsuarioCandidates(
   }
 
   const digits = portalLogin.replace(/\D/g, "")
-  if (digits.length >= 4 && digits.length < 12) {
-    add(digits.padStart(12, "0"))
-  }
   if (digits.length >= 4 && digits.length <= 15) {
     add(digits)
+  }
+  /** NIT a 12 dígitos: solo si está activado (a veces el SAT devuelve BAD_REQUEST o 0 filas). */
+  if (process.env.SAT_FEL_TRY_PADDED_USUARIO === "1" && digits.length >= 4 && digits.length < 12) {
+    add(digits.padStart(12, "0"))
   }
 
   return out

@@ -475,7 +475,9 @@ export function SatImportPanel({
                 <p className="text-[10px] text-gray-600">
                   Variantes R probadas (filas):{" "}
                   <span className="font-mono">
-                    {diagnostics.recibidasAttempts.map((a) => `${a.mode}=${a.rowCount}`).join(" · ")}
+                    {diagnostics.recibidasAttempts
+                      .map((a) => `${a.mode}=${a.rowCount}${a.codigo ? `/${a.codigo}` : ""}`)
+                      .join(" · ")}
                   </span>
                 </p>
               ) : null}

@@ -69,7 +69,7 @@ export interface SatFelRunDiagnostics {
   /** Modo que devolvió filas en compras (R), si hubo alguno. */
   recibidasQueryMode?: string | null
   /** Resumen de variantes R probadas (recepción vs emisión, nit, etc.). */
-  recibidasAttempts?: { mode: string; rowCount: number }[]
+  recibidasAttempts?: { mode: string; rowCount: number; codigo?: string | null }[]
   /** Valores de usuario= probados si el primero devolvió 0 filas. */
   felConsultaUsuariosProbados?: string[]
   /** Pistas de localStorage/sessionStorage en felcons (sin secretos). */

@@ -302,6 +302,43 @@ export type FelConsultaDteMergedOpts = {
 export type FelRecibidasAttempt = {
   mode: string
   rowCount: number
+  codigo?: string | null
+}
+
+/** Una sola petición consulta-dte (sin paginación), igual que moore-rpa fetchDataFromAPI. */
+export async function fetchFelConsultaDteOnce(
+  token: string,
+  cookieHeader: string,
+  user: string,
+  startDate: string,
+  endDate: string,
+  operationType: "E" | "R",
+  opts?: FelConsultaDteMergedOpts
+): Promise<unknown> {
+  const fmt = opts?.dateFormat ?? "iso"
+  const reqOpts: FelConsultaDteOpts = {
+    dateFormat: fmt,
+    ...(opts?.dateRangeKind ? { dateRangeKind: opts.dateRangeKind } : {}),
+    ...(opts?.nitReceptorQueryValue?.trim() ? { nitReceptorQueryValue: opts.nitReceptorQueryValue } : {}),
+    ...(opts?.forceNitIdReceptorWhenSameUsuario === true
+      ? { forceNitIdReceptorWhenSameUsuario: true }
+      : {}),
+    ...(opts?.consultaEstablecimientoForceZero === true
+      ? { consultaEstablecimientoForceZero: true }
+      : {}),
+  }
+  const url = buildFelConsultaDteUrl(user, startDate, endDate, operationType, reqOpts)
+  const page = opts?.felconsPage
+  if (page && process.env.SAT_FEL_DISABLE_BROWSER_FETCH !== "1") {
+    try {
+      opts?.onCheckpoint?.("transport", "browser")
+      return await fetchFelConsultaDteViaPage(page, token, url)
+    } catch (e) {
+      opts?.onCheckpoint?.("browser_fetch_fail", (e as Error).message?.slice(0, 160))
+    }
+  }
+  opts?.onCheckpoint?.("transport", "axios")
+  return fetchFelConsultaDte(token, cookieHeader, user, startDate, endDate, operationType, reqOpts)
 }
 
 /** Variantes de consulta R (recibidas): recepción vs emisión y nitIdReceptor. */
@@ -318,20 +355,26 @@ export async function fetchFelRecibidasBestEffort(
     dateRangeKind: FelConsultaDateRangeKind
     forceNit: boolean
     estZero: boolean
+    merged: boolean
   }> = [
-    { mode: "emision_nit_omit", dateRangeKind: "emision", forceNit: false, estZero: false },
-    { mode: "emision_nit_force", dateRangeKind: "emision", forceNit: true, estZero: false },
-    { mode: "recepcion_nit_force", dateRangeKind: "recepcion", forceNit: true, estZero: false },
-    { mode: "recepcion_nit_omit", dateRangeKind: "recepcion", forceNit: false, estZero: false },
-    { mode: "both_nit_force", dateRangeKind: "both", forceNit: true, estZero: false },
-    { mode: "recepcion_est0_nit_force", dateRangeKind: "recepcion", forceNit: true, estZero: true },
+    { mode: "moore_once", dateRangeKind: "emision", forceNit: false, estZero: false, merged: false },
+    { mode: "emision_nit_omit", dateRangeKind: "emision", forceNit: false, estZero: false, merged: true },
+    { mode: "emision_nit_force", dateRangeKind: "emision", forceNit: true, estZero: false, merged: true },
+    { mode: "emision_est0", dateRangeKind: "emision", forceNit: false, estZero: true, merged: false },
   ]
+  if (process.env.SAT_FEL_TRY_RECEPCION === "1") {
+    plan.push(
+      { mode: "recepcion_nit_omit", dateRangeKind: "recepcion", forceNit: false, estZero: false, merged: false },
+      { mode: "recepcion_nit_force", dateRangeKind: "recepcion", forceNit: true, estZero: false, merged: false }
+    )
+  }
 
   const attempts: FelRecibidasAttempt[] = []
-  let lastData: unknown = {}
+  let lastOk: unknown = {}
+  let lastOkMode: string | null = null
 
   for (const step of plan) {
-    const data = await fetchFelConsultaDteMergedPages(token, cookieHeader, user, startDate, endDate, "R", {
+    const stepOpts: FelConsultaDteMergedOpts = {
       ...opts,
       dateFormat: opts?.dateFormat ?? "iso",
       dateRangeKind: step.dateRangeKind,
@@ -339,16 +382,23 @@ export async function fetchFelRecibidasBestEffort(
       consultaEstablecimientoForceZero: step.estZero,
       onCheckpoint: (stage, detail) =>
         opts?.onCheckpoint?.(`r_${step.mode}.${stage}`, detail),
-    })
+    }
+    const data = step.merged
+      ? await fetchFelConsultaDteMergedPages(token, cookieHeader, user, startDate, endDate, "R", stepOpts)
+      : await fetchFelConsultaDteOnce(token, cookieHeader, user, startDate, endDate, "R", stepOpts)
     const rowCount = extractConsultaDteList(data).length
-    attempts.push({ mode: step.mode, rowCount })
-    lastData = data
+    const codigo = felMessageFromResponse(data).codigo
+    attempts.push({ mode: step.mode, rowCount, codigo })
+    if (!isFelCodigoClientError(codigo)) {
+      lastOk = data
+      lastOkMode = step.mode
+    }
     if (rowCount > 0) {
       return { data, winningMode: step.mode, attempts }
     }
   }
 
-  return { data: lastData, winningMode: null, attempts }
+  return { data: lastOk, winningMode: lastOkMode, attempts }
 }
 
 export async function fetchFelConsultaDteMergedPages(
@@ -442,7 +492,7 @@ export async function fetchFelConsultaDteMergedPages(
    * El SAT a veces responde ACCEPTED con `detalle.data` vacío en la petición **sin** `pagina`,
    * pero devuelve filas al pedir `pagina=1` explícita (el bucle de páginas 2..n nunca llegaba a la 1).
    */
-  if (merged.length === 0) {
+  if (merged.length === 0 && total > 0) {
     const hint = Math.max(1, slice.pageSizeHint || 10)
     const maxFirstPass = Math.min(
       120,

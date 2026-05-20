@@ -117,6 +117,30 @@ async function getAccessTokenCookie(page: Page, timeoutMs: number) {
   return { accessTokenCookie: cookies.find((c) => c.name === "ACCESS_TOKEN") ?? null, cookies }
 }
 
+/** Tras «Consultar DTE» en farm3, usar la pestaña/navegación real a felcons (no solo goto). */
+async function openFelconsConsultaFromMenu(browser: Browser, page: Page): Promise<Page> {
+  await page.locator("text/Consultar DTE").click()
+
+  for (let i = 0; i < 40; i++) {
+    await new Promise((r) => setTimeout(r, 500))
+    const pages = await browser.pages()
+    for (const p of pages) {
+      const url = p.url()
+      if (url.includes("felcons") && url.includes("dte")) {
+        await p.bringToFront().catch(() => {})
+        return p
+      }
+    }
+    if (page.url().includes("felcons")) return page
+  }
+
+  await page.goto("https://felcons.c.sat.gob.gt/dte-agencia-virtual/dte-consulta", {
+    waitUntil: "networkidle2",
+    timeout: 90000,
+  })
+  return page
+}
+
 function buildCookieHeader(cookies: { name: string; value: string }[]): string {
   const prioritized = ["ACCESS_TOKEN", "JSESSIONID"]
   const sorted = [...cookies].sort((left, right) => {
@@ -240,12 +264,9 @@ export async function runSatFelExtraction(opts: {
     await new Promise((r) => setTimeout(r, 500))
     await page.locator("text/Factura Electrónica en Línea (FEL)").hover()
     await new Promise((r) => setTimeout(r, 500))
-    await page.locator("text/Consultar DTE").click()
-    await new Promise((r) => setTimeout(r, 1000))
-    await page.goto("https://felcons.c.sat.gob.gt/dte-agencia-virtual/dte-consulta", {
-      waitUntil: "domcontentloaded",
-    })
-    cp("sat.felcons_consulta_page")
+    const felPage = await openFelconsConsultaFromMenu(browser, page)
+    page = felPage
+    cp("sat.felcons_consulta_page", page.url().slice(0, 120))
     /** Dejar que la SPA de felcons asiente cookies / token antes de leerlos (moore-rpa espera 1s; aquí un poco más). */
     await new Promise((r) => setTimeout(r, 2000))
 
@@ -574,6 +595,14 @@ export async function runSatFelExtraction(opts: {
   const msgE = felMessageFromResponse(preSales)
   const msgR = felMessageFromResponse(prePurchases)
 
+  if (isFelCodigoClientError(msgR.codigo)) {
+    warnings.push(
+      `Recibidos (R): el SAT respondió ${msgR.codigo ?? "error"}${
+        msgR.mensaje ? ` — ${msgR.mensaje}` : ""
+      }. Suele deberse a parámetros no admitidos (p. ej. fechaRecepcion en la URL); la consulta moore usa solo fechaEmisionIni/Final.`
+    )
+  }
+
   let xmlSales: FelXmlConverted[] = []
   let xmlPurchases: FelXmlConverted[] = []
   try {
@@ -690,6 +719,9 @@ export async function runSatFelExtraction(opts: {
     ) {
       warnings.push(
         "El SAT respondió ACCEPTED con total=0 en emitidos y recibidos: no hay documentos en ese intervalo para el parámetro usuario= de la consulta. Verifica el mismo rango en el portal FEL. En R, nitIdReceptor solo se envía si el NIT del perfil difiere del login; si entras con el mismo NIT que en perfil, queda vacío como moore-rpa. SAT_FEL_OMIT_NIT_RECEPTOR=1 fuerza siempre vacío; SAT_FEL_FORCE_NIT_RECEPTOR=1 fuerza enviarlo aunque coincida."
+      )
+      warnings.push(
+        "Si en FEL ves compras por fecha de recepción pero aquí no: la API consulta-dte filtra por fecha de emisión del DTE. Prueba un rango más amplio en «desde» (p. ej. 3–6 meses antes) con el mismo «hasta»."
       )
     }
     if (hintE.maxArrayLengthSeen > 0 || hintR.maxArrayLengthSeen > 0) {
